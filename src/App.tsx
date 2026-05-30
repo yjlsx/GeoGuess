@@ -60,7 +60,7 @@ async function getResponseErrorMessage(response: Response) {
 
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
-  const [cropMode, setCropMode] = useState<CropMode>("upper_half");
+  const [cropMode, setCropMode] = useState<CropMode>("full");
   const [scope, setScope] = useState<UserScope>({});
   const [manualClues, setManualClues] = useState<ExtractedClues>(emptyClues);
   const [investigation, setInvestigation] = useState<Investigation | null>(null);

@@ -33,13 +33,13 @@ export function ImageInput({ file, cropMode, onFileChange, onCropModeChange }: P
           onChange={(event) => onFileChange(event.target.files?.[0] ?? null)}
         />
       </label>
-      {file ? <p className="hint">已选择：{file.name}</p> : <p className="hint">支持截图、裁切图和视频帧。</p>}
+      {file ? <p className="hint">已选择：{file.name}</p> : <p className="hint">一般上传的是已裁好的上半部分画面，默认按整张图分析。</p>}
       {previewUrl ? <img className="image-preview" src={previewUrl} alt="已选择图片预览" /> : null}
       <label className="field">
         分析区域
         <select value={cropMode} onChange={(event) => onCropModeChange(event.target.value as CropMode)}>
-          <option value="upper_half">上半张</option>
           <option value="full">整张</option>
+          <option value="upper_half">再取上半张</option>
           <option value="manual" disabled>
             手动框选（后续增强）
           </option>

@@ -62,6 +62,13 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "开始分析" })).toBeInTheDocument();
   });
 
+  it("defaults to analyzing the uploaded image as-is", () => {
+    render(<App />);
+
+    expect(screen.getByLabelText("分析区域")).toHaveValue("full");
+    expect(screen.getByText("一般上传的是已裁好的上半部分画面，默认按整张图分析。")).toBeInTheDocument();
+  });
+
   it("shows a local error and does not call fetch when no file is selected", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     render(<App />);
