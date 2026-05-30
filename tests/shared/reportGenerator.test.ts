@@ -16,4 +16,29 @@ describe("buildReports", () => {
     expect(report.fullMarkdown).toContain("railway runs horizontally");
     expect(report.fullMarkdown).toContain("Copy into Google Earth search");
   });
+
+  it("formats scope coordinate boxes and empty lists readably", () => {
+    const report = buildReports({
+      ...sampleInvestigationInput,
+      userScope: {
+        ...sampleInvestigationInput.userScope,
+        coordinateBox: {
+          minLat: 42,
+          minLon: 112,
+          maxLat: 43,
+          maxLon: 113
+        },
+        dateOrTimeHint: ""
+      },
+      extractedClues: {
+        ...sampleInvestigationInput.extractedClues,
+        ocrText: []
+      }
+    });
+
+    expect(report.fullMarkdown).toContain("coordinateBox: 42.00000, 112.00000 to 43.00000, 113.00000");
+    expect(report.fullMarkdown).not.toContain("[object Object]");
+    expect(report.fullMarkdown).not.toContain("dateOrTimeHint:");
+    expect(report.fullMarkdown).toContain("- None provided");
+  });
 });

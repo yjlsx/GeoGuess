@@ -1,12 +1,38 @@
 import { formatCoordinate } from "./mapLinks";
-import type { ReportInput } from "./sampleInvestigation";
+import type { CoordinateBox, ReportInput, UserScope } from "./types";
 
 function confidenceLabel(confidence: string) {
   return `${confidence[0].toUpperCase()}${confidence.slice(1)} confidence`;
 }
 
 function list(items: string[]) {
+  if (items.length === 0) {
+    return "- None provided";
+  }
+
   return items.map((item) => `- ${item}`).join("\n");
+}
+
+function formatCoordinateBox(coordinateBox: CoordinateBox) {
+  return `${formatCoordinate(coordinateBox.minLat, coordinateBox.minLon)} to ${formatCoordinate(
+    coordinateBox.maxLat,
+    coordinateBox.maxLon
+  )}`;
+}
+
+function formatScope(userScope: UserScope) {
+  return Object.entries(userScope)
+    .flatMap(([key, value]) => {
+      if (value === undefined || value === null || value === "") {
+        return [];
+      }
+
+      if (key === "coordinateBox") {
+        return [`${key}: ${formatCoordinateBox(value as CoordinateBox)}`];
+      }
+
+      return [`${key}: ${value}`];
+    });
 }
 
 export function buildReports(input: ReportInput) {
@@ -30,7 +56,7 @@ export function buildReports(input: ReportInput) {
     "# Image Geolocation Report",
     "",
     "## User Scope",
-    list(Object.entries(input.userScope).map(([key, value]) => `${key}: ${value}`)),
+    list(formatScope(input.userScope)),
     "",
     "## Extracted Clues",
     "OCR:",

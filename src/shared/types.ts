@@ -55,6 +55,13 @@ export type Candidate = {
   earthVerificationChecklist: string[];
 };
 
+export type ReportInput = {
+  userScope: UserScope;
+  extractedClues: ExtractedClues;
+  searchQueries: SearchQuery[];
+  candidates: Candidate[];
+};
+
 export type Investigation = {
   id: string;
   image: {

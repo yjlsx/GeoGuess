@@ -1,12 +1,5 @@
 import { buildGoogleEarthHint, buildGoogleMapsLink } from "./mapLinks";
-import type { Candidate, ExtractedClues, SearchQuery, UserScope } from "./types";
-
-export type ReportInput = {
-  userScope: UserScope;
-  extractedClues: ExtractedClues;
-  searchQueries: SearchQuery[];
-  candidates: Candidate[];
-};
+import type { ReportInput } from "./types";
 
 export const sampleInvestigationInput: ReportInput = {
   userScope: {
