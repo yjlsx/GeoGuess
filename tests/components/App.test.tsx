@@ -9,6 +9,7 @@ const successfulInvestigation: Investigation = {
     originalPath: "uploads/image.jpg",
     cropMode: "upper_half"
   },
+  outputLanguage: "zh-CN",
   userScope: {
     country: "Japan",
     region: "Tokyo",
@@ -25,7 +26,33 @@ const successfulInvestigation: Investigation = {
     spatialRelationships: ["tracks beside towers"],
     inferredSearchTerms: ["Tokyo JR rail platform"]
   },
-  searchQueries: [],
+  searchQueries: [
+    {
+      query: "Tokyo JR rail platform",
+      language: "en",
+      purpose: "scope-source-facility"
+    }
+  ],
+  searchProcess: [
+    {
+      title: "步骤 1：范围/来源/设施搜索",
+      query: "Tokyo JR rail platform",
+      rationale: "把用户范围和设施类型组合成第一组搜索词",
+      status: "planned"
+    }
+  ],
+  imageAnalysis: {
+    recognitionMode: "local-metadata",
+    observations: ["自动读取图片尺寸：1280 x 720"],
+    limitations: ["未配置视觉模型，OCR 和地物识别依赖手动线索或后续模型"]
+  },
+  seasonalAnalysis: {
+    captureDateHint: "2026-04-18",
+    inferredSeason: "春季",
+    confidence: "medium",
+    reasoning: ["日期提示 2026-04-18 对应北半球春季"],
+    mapComparisonNotes: ["在 Google Earth 历史影像中优先对比春季或相邻月份"]
+  },
   candidates: [
     {
       id: "candidate-1",
@@ -35,6 +62,12 @@ const successfulInvestigation: Investigation = {
       mapLinks: {
         googleMaps: "https://maps.example.test/?q=35.6895,139.6917",
         googleEarthHint: "Check platform geometry in Google Earth."
+      },
+      mapPreview: {
+        googleMapsEmbedUrl: "https://maps.example.test/embed?q=35.6895,139.6917",
+        googleEarthWebUrl: "https://earth.example.test/search/35.6895,139.6917",
+        screenshotStatus: "当前使用 Google Maps 嵌入预览；Earth 历史影像需要打开核验。",
+        notes: ["对比轨道方向、塔楼相对位置和道路边界"]
       },
       matchingEvidence: ["JR sign matches"],
       uncertainty: ["Image is cropped"],
@@ -66,6 +99,7 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.getByLabelText("分析区域")).toHaveValue("full");
+    expect(screen.getByLabelText("输出语言")).toHaveValue("zh-CN");
     expect(screen.getByText("一般上传的是已裁好的上半部分画面，默认按整张图分析。")).toBeInTheDocument();
   });
 
@@ -89,6 +123,7 @@ describe("App", () => {
     const file = new File(["image-bytes"], "frame.jpg", { type: "image/jpeg" });
     fireEvent.change(screen.getByLabelText("上传图片"), { target: { files: [file] } });
     fireEvent.change(screen.getByLabelText("分析区域"), { target: { value: "full" } });
+    fireEvent.change(screen.getByLabelText("输出语言"), { target: { value: "en-US" } });
     fireEvent.change(screen.getByLabelText("国家"), { target: { value: "Japan" } });
     fireEvent.change(screen.getByLabelText("地区"), { target: { value: "Tokyo" } });
     fireEvent.change(screen.getByLabelText("设施类型"), { target: { value: "rail station" } });
@@ -107,6 +142,7 @@ describe("App", () => {
     expect(request.method).toBe("POST");
     expect(formData.get("image")).toBe(file);
     expect(formData.get("cropMode")).toBe("full");
+    expect(formData.get("outputLanguage")).toBe("en-US");
     expect(formData.get("country")).toBe("Japan");
     expect(formData.get("region")).toBe("Tokyo");
     expect(formData.get("facilityType")).toBe("rail station");
@@ -155,7 +191,12 @@ describe("App", () => {
     expect(await screen.findByText("35.68950, 139.69170")).toBeInTheDocument();
     expect(screen.getByText("高置信")).toBeInTheDocument();
     expect(screen.queryByText("high")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText("查看证据链和核验清单"));
+    expect(screen.getByText("自动识别线索")).toBeInTheDocument();
+    expect(screen.getByText("搜索过程")).toBeInTheDocument();
+    expect(screen.getByText("季节与历史影像")).toBeInTheDocument();
+    const mapFrame = screen.getByTitle("候选 1 Google Maps 预览");
+    expect(mapFrame).toHaveAttribute("src", "https://maps.example.test/embed?q=35.6895,139.6917");
+    fireEvent.click(screen.getByText("查看完整证据链"));
     expect(screen.getByText("JR sign matches")).toBeInTheDocument();
     fireEvent.click(screen.getByText("完整 Markdown 报告"));
     expect(screen.getByText("完整报告：包含证据链")).toBeInTheDocument();

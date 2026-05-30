@@ -6,6 +6,7 @@ const { runInvestigationMock } = vi.hoisted(() => ({
   runInvestigationMock: vi.fn(async (input) => ({
     id: input.id,
     image: input.image,
+    outputLanguage: input.outputLanguage,
     userScope: input.userScope,
     extractedClues: {
       ocrText: [],
@@ -17,6 +18,19 @@ const { runInvestigationMock } = vi.hoisted(() => ({
     },
     searchQueries: [],
     candidates: [],
+    searchProcess: [],
+    imageAnalysis: {
+      recognitionMode: "local-metadata",
+      observations: [],
+      limitations: []
+    },
+    seasonalAnalysis: {
+      captureDateHint: "",
+      inferredSeason: "",
+      confidence: "low",
+      reasoning: [],
+      mapComparisonNotes: []
+    },
     report: {
       summaryMarkdown: "",
       fullMarkdown: "",
@@ -103,6 +117,17 @@ describe("local investigation API", () => {
     expect(response.body.image.cropMode).toBe("manual");
     expect(response.body.image.cropPath).toMatch(/-manual\.jpg$/);
     expect(runInvestigationMock).toHaveBeenCalledOnce();
+  });
+
+  it("passes the requested report output language to investigations", async () => {
+    const response = await request(app)
+      .post("/api/investigations")
+      .attach("image", await imageBuffer(), "scene.jpg")
+      .field("outputLanguage", "en-US")
+      .expect(200);
+
+    expect(response.body.outputLanguage).toBe("en-US");
+    expect(runInvestigationMock).toHaveBeenCalledWith(expect.objectContaining({ outputLanguage: "en-US" }));
   });
 
   it("returns 413 when the upload exceeds the configured file size limit", async () => {

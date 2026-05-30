@@ -26,7 +26,8 @@ const manualCropSchema = z.object({
 });
 
 const bodySchema = z.object({
-  cropMode: z.enum(["full", "upper_half", "manual"]).default("upper_half"),
+  cropMode: z.enum(["full", "upper_half", "manual"]).default("full"),
+  outputLanguage: z.enum(["zh-CN", "en-US"]).default("zh-CN"),
   country: z.string().optional(),
   region: z.string().optional(),
   facilityType: z.string().optional(),
@@ -102,6 +103,7 @@ app.post("/api/investigations", upload.single("image"), async (req, res, next) =
     const investigation = await runInvestigation({
       id,
       image: { originalPath, cropPath, cropMode: parsed.cropMode },
+      outputLanguage: parsed.outputLanguage,
       userScope: {
         country: parsed.country,
         region: parsed.region,

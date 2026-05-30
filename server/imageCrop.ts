@@ -21,10 +21,6 @@ export async function createAnalysisCrop(args: {
   cropMode: CropMode;
   manualCrop?: ManualCrop;
 }) {
-  if (args.cropMode === "full") {
-    return args.imagePath;
-  }
-
   let metadata: sharp.Metadata;
   try {
     metadata = await sharp(args.imagePath).metadata();
@@ -34,6 +30,10 @@ export async function createAnalysisCrop(args: {
   }
   if (!metadata.width || !metadata.height) {
     throw new CropValidationError("Unable to read image dimensions");
+  }
+
+  if (args.cropMode === "full") {
+    return args.imagePath;
   }
 
   const extract =

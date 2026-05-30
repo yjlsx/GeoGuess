@@ -1,5 +1,6 @@
 export type CropMode = "full" | "upper_half" | "manual";
 export type Confidence = "high" | "medium" | "low";
+export type OutputLanguage = "zh-CN" | "en-US";
 
 export type CoordinateBox = {
   minLat: number;
@@ -33,6 +34,13 @@ export type SearchQuery = {
   purpose: string;
 };
 
+export type SearchProcessStep = {
+  title: string;
+  query?: string;
+  rationale: string;
+  status: "planned" | "previewed" | "needs-earth-check";
+};
+
 export type SourceEvidence = {
   title: string;
   url: string;
@@ -49,21 +57,46 @@ export type Candidate = {
     googleMaps: string;
     googleEarthHint?: string;
   };
+  mapPreview: {
+    googleMapsEmbedUrl: string;
+    googleEarthWebUrl: string;
+    screenshotStatus: string;
+    notes: string[];
+  };
   matchingEvidence: string[];
   uncertainty: string[];
   sources: SourceEvidence[];
   earthVerificationChecklist: string[];
 };
 
+export type ImageAnalysis = {
+  recognitionMode: "local-metadata" | "vision-model";
+  observations: string[];
+  limitations: string[];
+};
+
+export type SeasonalAnalysis = {
+  captureDateHint: string;
+  inferredSeason: string;
+  confidence: Confidence;
+  reasoning: string[];
+  mapComparisonNotes: string[];
+};
+
 export type ReportInput = {
+  outputLanguage?: OutputLanguage;
   userScope: UserScope;
   extractedClues: ExtractedClues;
   searchQueries: SearchQuery[];
+  searchProcess?: SearchProcessStep[];
+  imageAnalysis?: ImageAnalysis;
+  seasonalAnalysis?: SeasonalAnalysis;
   candidates: Candidate[];
 };
 
 export type Investigation = {
   id: string;
+  outputLanguage: OutputLanguage;
   image: {
     originalPath: string;
     cropPath?: string;
@@ -72,6 +105,9 @@ export type Investigation = {
   userScope: UserScope;
   extractedClues: ExtractedClues;
   searchQueries: SearchQuery[];
+  searchProcess: SearchProcessStep[];
+  imageAnalysis: ImageAnalysis;
+  seasonalAnalysis: SeasonalAnalysis;
   candidates: Candidate[];
   report: {
     summaryMarkdown: string;

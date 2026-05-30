@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildGoogleEarthHint, buildGoogleMapsLink, formatCoordinate } from "../../src/shared/mapLinks";
+import {
+  buildGoogleEarthHint,
+  buildGoogleEarthWebUrl,
+  buildGoogleMapsEmbedUrl,
+  buildGoogleMapsLink,
+  formatCoordinate
+} from "../../src/shared/mapLinks";
 
 describe("mapLinks", () => {
   it("formats coordinates with five decimal places", () => {
@@ -15,6 +21,15 @@ describe("mapLinks", () => {
   it("builds a Google Earth copy hint", () => {
     expect(buildGoogleEarthHint(42.25967, 112.75623)).toBe(
       "复制到 Google Earth 搜索：42.25967, 112.75623"
+    );
+  });
+
+  it("builds embeddable Google Maps and Google Earth verification URLs", () => {
+    expect(buildGoogleMapsEmbedUrl(42.25967, 112.75623)).toBe(
+      "https://maps.google.com/maps?q=42.25967%2C112.75623&z=16&output=embed"
+    );
+    expect(buildGoogleEarthWebUrl(42.25967, 112.75623)).toBe(
+      "https://earth.google.com/web/search/42.25967%2C112.75623"
     );
   });
 });

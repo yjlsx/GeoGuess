@@ -1,7 +1,8 @@
-import { buildGoogleEarthHint, buildGoogleMapsLink } from "./mapLinks";
+import { buildGoogleEarthHint, buildGoogleEarthWebUrl, buildGoogleMapsEmbedUrl, buildGoogleMapsLink } from "./mapLinks";
 import type { ReportInput } from "./types";
 
 export const sampleInvestigationInput: ReportInput = {
+  outputLanguage: "zh-CN",
   userScope: {
     country: "Mongolia",
     region: "Dornogovi",
@@ -24,6 +25,31 @@ export const sampleInvestigationInput: ReportInput = {
       purpose: "scope-source-facility"
     }
   ],
+  searchProcess: [
+    {
+      title: "步骤 1：范围/来源/设施搜索",
+      query: "Mongolia Dornogovi railway station CCTV 7 China Mongolia joint training",
+      rationale: "把用户提供的国家、地区、设施类型和来源组合成第一组候选搜索。",
+      status: "planned"
+    },
+    {
+      title: "步骤 2：地图核验",
+      rationale: "打开候选坐标，对比铁路方向、站房位置、道路和通信塔。",
+      status: "previewed"
+    }
+  ],
+  imageAnalysis: {
+    recognitionMode: "local-metadata",
+    observations: ["自动读取图片尺寸和画幅，并将 OCR/地物线索作为待视觉模型确认项。"],
+    limitations: ["离线示例不会伪造 Google Earth 历史截图。"]
+  },
+  seasonalAnalysis: {
+    captureDateHint: "2026",
+    inferredSeason: "日期不足，无法可靠判断季节",
+    confidence: "low",
+    reasoning: ["截图文字只有年份，没有明确月份，季节判断需要结合视频发布日期或来源信息。"],
+    mapComparisonNotes: ["在 Google Earth 中优先检查 2026 年附近的历史影像，再对比植被和裸地颜色。"]
+  },
   candidates: [
     {
       id: "candidate-1",
@@ -34,6 +60,12 @@ export const sampleInvestigationInput: ReportInput = {
       mapLinks: {
         googleMaps: buildGoogleMapsLink(42.25967, 112.75623),
         googleEarthHint: buildGoogleEarthHint(42.25967, 112.75623)
+      },
+      mapPreview: {
+        googleMapsEmbedUrl: buildGoogleMapsEmbedUrl(42.25967, 112.75623),
+        googleEarthWebUrl: buildGoogleEarthWebUrl(42.25967, 112.75623),
+        screenshotStatus: "当前为 Google Maps 嵌入预览；Google Earth 历史影像需要打开后按日期核验。",
+        notes: ["优先对比铁路走向、站房位置、通信塔和道路交叉点。"]
       },
       matchingEvidence: [
         "画面中的铁路走向与候选地点一致",

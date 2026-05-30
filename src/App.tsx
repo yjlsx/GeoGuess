@@ -3,7 +3,7 @@ import { CandidateResults } from "./components/CandidateResults";
 import { ImageInput } from "./components/ImageInput";
 import { ManualCluesForm } from "./components/ManualCluesForm";
 import { ScopeForm } from "./components/ScopeForm";
-import type { CropMode, ExtractedClues, Investigation, UserScope } from "./shared/types";
+import type { CropMode, ExtractedClues, Investigation, OutputLanguage, UserScope } from "./shared/types";
 
 const emptyClues: ExtractedClues = {
   ocrText: [],
@@ -61,6 +61,7 @@ async function getResponseErrorMessage(response: Response) {
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [cropMode, setCropMode] = useState<CropMode>("full");
+  const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>("zh-CN");
   const [scope, setScope] = useState<UserScope>({});
   const [manualClues, setManualClues] = useState<ExtractedClues>(emptyClues);
   const [investigation, setInvestigation] = useState<Investigation | null>(null);
@@ -77,6 +78,7 @@ export default function App() {
       const formData = new FormData();
       formData.append("image", file);
       formData.append("cropMode", cropMode);
+      formData.append("outputLanguage", outputLanguage);
       for (const [key, value] of Object.entries(scope)) {
         if (typeof value === "string" && value) {
           formData.append(key, value);
@@ -99,11 +101,21 @@ export default function App() {
     <main className="app-shell">
       <header className="app-header">
         <h1>Image Geo Finder</h1>
-        <p>上传截图，填写已知范围，生成候选坐标和 Google Earth 核验清单。</p>
+        <p>上传截图，自动整理线索，生成候选证据链、地图预览和 Google Earth 核验清单。</p>
       </header>
       <div className="workspace">
         <div className="input-column">
           <ImageInput file={file} cropMode={cropMode} onFileChange={setFile} onCropModeChange={setCropMode} />
+          <section className="panel">
+            <h2>输出设置</h2>
+            <label className="field">
+              输出语言
+              <select value={outputLanguage} onChange={(event) => setOutputLanguage(event.target.value as OutputLanguage)}>
+                <option value="zh-CN">中文</option>
+                <option value="en-US">English</option>
+              </select>
+            </label>
+          </section>
           <ScopeForm value={scope} onChange={setScope} />
           <ManualCluesForm value={manualClues} onChange={setManualClues} />
           <button className="primary-button" onClick={analyze} disabled={loading}>

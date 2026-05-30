@@ -1,4 +1,9 @@
-import { buildGoogleEarthHint, buildGoogleMapsLink } from "../../src/shared/mapLinks";
+import {
+  buildGoogleEarthHint,
+  buildGoogleEarthWebUrl,
+  buildGoogleMapsEmbedUrl,
+  buildGoogleMapsLink
+} from "../../src/shared/mapLinks";
 import type { SearchProvider } from "./types";
 
 export const mockSearchProvider: SearchProvider = {
@@ -13,6 +18,15 @@ export const mockSearchProvider: SearchProvider = {
         mapLinks: {
           googleMaps: buildGoogleMapsLink(42.25967, 112.75623),
           googleEarthHint: buildGoogleEarthHint(42.25967, 112.75623)
+        },
+        mapPreview: {
+          googleMapsEmbedUrl: buildGoogleMapsEmbedUrl(42.25967, 112.75623),
+          googleEarthWebUrl: buildGoogleEarthWebUrl(42.25967, 112.75623),
+          screenshotStatus: "当前本地版使用 Google Maps 嵌入预览；Google Earth 历史影像需要打开后按日期手动核验。",
+          notes: [
+            "地图预览用于快速检查道路、轨道和建筑相对位置。",
+            "如果需要正式截图，可打开 Google Maps 或 Google Earth 后保存当前视角。"
+          ]
         },
         matchingEvidence: [
           "离线模拟候选用于在没有外部 API 时测试完整报告流程",

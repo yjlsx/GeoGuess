@@ -31,6 +31,11 @@ describe("runInvestigation", () => {
     expect(result.candidates[0].confidence).toBe("low");
     expect(result.candidates[0].uncertainty).toContain("当前为离线模拟候选，不代表真实定位结论");
     expect(result.candidates[0].sources[0].title).toBe("离线模拟搜索");
+    expect(result.candidates[0].mapPreview.googleMapsEmbedUrl).toContain("maps.google.com/maps");
+    expect(result.candidates[0].mapPreview.googleEarthWebUrl).toContain("earth.google.com");
+    expect(result.searchProcess.length).toBeGreaterThan(0);
+    expect(result.imageAnalysis.observations.length).toBeGreaterThan(0);
+    expect(result.seasonalAnalysis.inferredSeason).toBeDefined();
     expect(result.report.summaryMarkdown).toContain("低置信");
     expect(result.report.summaryMarkdown).not.toContain("Low confidence");
   });
@@ -41,6 +46,7 @@ describe("runInvestigation", () => {
         originalPath: "local://sample",
         cropMode: "full" as const
       },
+      outputLanguage: "zh-CN" as const,
       userScope: {
         country: "Mongolia"
       }
@@ -77,6 +83,12 @@ describe("runInvestigation", () => {
       mapLinks: {
         googleMaps: "https://maps.example/custom"
       },
+      mapPreview: {
+        googleMapsEmbedUrl: "https://maps.example/embed",
+        googleEarthWebUrl: "https://earth.example/search",
+        screenshotStatus: "自定义候选没有截图",
+        notes: ["custom preview"]
+      },
       matchingEvidence: ["provider supplied candidate"],
       uncertainty: ["test provider"],
       sources: [
@@ -100,6 +112,7 @@ describe("runInvestigation", () => {
         country: "Mongolia",
         facilityType: "rail depot"
       },
+      outputLanguage: "zh-CN",
       manualClues,
       providers: {
         vision: {
@@ -122,5 +135,6 @@ describe("runInvestigation", () => {
     expect(seen.queries.length).toBeGreaterThan(0);
     expect(seen.queries.map((query) => query.query).join("\n")).toContain("custom depot");
     expect(result.candidates).toEqual([customCandidate]);
+    expect(result.report.fullMarkdown).toContain("搜索过程");
   });
 });

@@ -17,6 +17,9 @@ describe("buildReports", () => {
     const report = buildReports(sampleInvestigationInput);
     expect(report.fullMarkdown).toContain("# 图片定位报告");
     expect(report.fullMarkdown).toContain("## 提取到的线索");
+    expect(report.fullMarkdown).toContain("## 搜索过程");
+    expect(report.fullMarkdown).toContain("## 季节与历史影像核验");
+    expect(report.fullMarkdown).toContain("Google Maps 地图预览");
     expect(report.fullMarkdown).toContain("铁路在画面前景横向延伸");
     expect(report.fullMarkdown).toContain("复制到 Google Earth 搜索");
     expect(report.fullMarkdown).not.toContain("## Extracted Clues");
@@ -45,5 +48,17 @@ describe("buildReports", () => {
     expect(report.fullMarkdown).not.toContain("[object Object]");
     expect(report.fullMarkdown).not.toContain("dateOrTimeHint:");
     expect(report.fullMarkdown).toContain("- 未提供");
+  });
+
+  it("can generate an English evidence-chain report when requested", () => {
+    const report = buildReports({
+      ...sampleInvestigationInput,
+      outputLanguage: "en-US"
+    });
+
+    expect(report.fullMarkdown).toContain("# Image Geolocation Evidence Report");
+    expect(report.fullMarkdown).toContain("## Search Process");
+    expect(report.fullMarkdown).toContain("## Season and Historical Imagery Check");
+    expect(report.summaryMarkdown).toContain("High confidence");
   });
 });

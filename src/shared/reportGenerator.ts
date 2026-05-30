@@ -1,14 +1,25 @@
 import { formatCoordinate } from "./mapLinks";
-import type { CoordinateBox, ReportInput, UserScope } from "./types";
+import type { CoordinateBox, OutputLanguage, ReportInput, UserScope } from "./types";
 
-function confidenceLabel(confidence: string) {
-  const labels: Record<string, string> = {
-    high: "高置信",
-    medium: "中置信",
-    low: "低置信"
+function t(language: OutputLanguage, zh: string, en: string) {
+  return language === "zh-CN" ? zh : en;
+}
+
+function confidenceLabel(confidence: string, language: OutputLanguage) {
+  const labels: Record<OutputLanguage, Record<string, string>> = {
+    "zh-CN": {
+      high: "高置信",
+      medium: "中置信",
+      low: "低置信"
+    },
+    "en-US": {
+      high: "High confidence",
+      medium: "Medium confidence",
+      low: "Low confidence"
+    }
   };
 
-  return labels[confidence] ?? confidence;
+  return labels[language][confidence] ?? confidence;
 }
 
 function list(items: string[]) {
@@ -26,21 +37,32 @@ function formatCoordinateBox(coordinateBox: CoordinateBox) {
   )}`;
 }
 
-function scopeLabel(key: string) {
-  const labels: Record<string, string> = {
-    country: "国家",
-    region: "地区",
-    coordinateBox: "坐标范围",
-    facilityType: "设施类型",
-    source: "来源",
-    dateOrTimeHint: "时间提示",
-    notes: "备注"
+function scopeLabel(key: string, language: OutputLanguage) {
+  const labels: Record<OutputLanguage, Record<string, string>> = {
+    "zh-CN": {
+      country: "国家",
+      region: "地区",
+      coordinateBox: "坐标范围",
+      facilityType: "设施类型",
+      source: "来源",
+      dateOrTimeHint: "时间提示",
+      notes: "备注"
+    },
+    "en-US": {
+      country: "Country",
+      region: "Region",
+      coordinateBox: "Coordinate box",
+      facilityType: "Facility type",
+      source: "Source",
+      dateOrTimeHint: "Date/time hint",
+      notes: "Notes"
+    }
   };
 
-  return labels[key] ?? key;
+  return labels[language][key] ?? key;
 }
 
-function formatScope(userScope: UserScope) {
+function formatScope(userScope: UserScope, language: OutputLanguage) {
   return Object.entries(userScope)
     .flatMap(([key, value]) => {
       if (value === undefined || value === null || value === "") {
@@ -48,73 +70,101 @@ function formatScope(userScope: UserScope) {
       }
 
       if (key === "coordinateBox") {
-        return [`${scopeLabel(key)}：${formatCoordinateBox(value as CoordinateBox)}`];
+        return [`${scopeLabel(key, language)}：${formatCoordinateBox(value as CoordinateBox)}`];
       }
 
-      return [`${scopeLabel(key)}：${value}`];
+      return [`${scopeLabel(key, language)}：${value}`];
     });
 }
 
-function queryPurposeLabel(purpose: string) {
-  const labels: Record<string, string> = {
-    "scope-source-facility": "范围/来源/设施",
-    "ocr-scope": "OCR/范围",
-    "inferred-term": "推断搜索词"
+function queryPurposeLabel(purpose: string, language: OutputLanguage) {
+  const labels: Record<OutputLanguage, Record<string, string>> = {
+    "zh-CN": {
+      "scope-source-facility": "范围/来源/设施",
+      "ocr-scope": "OCR/范围",
+      "inferred-term": "推断搜索词"
+    },
+    "en-US": {
+      "scope-source-facility": "scope/source/facility",
+      "ocr-scope": "OCR/scope",
+      "inferred-term": "inferred term"
+    }
   };
 
-  return labels[purpose] ?? purpose;
+  return labels[language][purpose] ?? purpose;
 }
 
 export function buildReports(input: ReportInput) {
+  const language = input.outputLanguage ?? "zh-CN";
   const summaryMarkdown = input.candidates
     .map((candidate, index) => {
       return [
-        `### 候选 ${index + 1}：${confidenceLabel(candidate.confidence)}`,
+        `### ${t(language, "候选", "Candidate")} ${index + 1}：${confidenceLabel(candidate.confidence, language)}`,
         `${formatCoordinate(candidate.latitude, candidate.longitude)}`,
         candidate.mapLinks.googleMaps,
         "",
-        "关键证据：",
+        t(language, "关键证据：", "Key evidence:"),
         list(candidate.matchingEvidence.slice(0, 3)),
         "",
-        "主要不确定点：",
+        t(language, "主要不确定点：", "Main uncertainty:"),
         list(candidate.uncertainty.slice(0, 2))
       ].join("\n");
     })
     .join("\n\n");
 
   const fullMarkdown = [
-    "# 图片定位报告",
+    t(language, "# 图片定位报告", "# Image Geolocation Evidence Report"),
     "",
-    "## 用户提供的范围",
-    list(formatScope(input.userScope)),
+    t(language, "## 用户提供的范围", "## User Scope"),
+    list(formatScope(input.userScope, language)),
     "",
-    "## 提取到的线索",
-    "OCR 文字：",
+    t(language, "## 自动识别线索", "## Automatic Recognition Clues"),
+    list(input.imageAnalysis?.observations ?? []),
+    t(language, "能力边界：", "Limitations:"),
+    list(input.imageAnalysis?.limitations ?? []),
+    "",
+    t(language, "## 提取到的线索", "## Extracted Clues"),
+    t(language, "OCR 文字：", "OCR:"),
     list(input.extractedClues.ocrText),
-    "地物特征：",
+    t(language, "地物特征：", "Scene features:"),
     list(input.extractedClues.sceneFeatures),
-    "空间关系：",
+    t(language, "空间关系：", "Spatial relationships:"),
     list(input.extractedClues.spatialRelationships),
     "",
-    "## 搜索语句",
-    list(input.searchQueries.map((query) => `${query.query}（${queryPurposeLabel(query.purpose)}）`)),
+    t(language, "## 搜索过程", "## Search Process"),
+    list((input.searchProcess ?? []).map((step) => `${step.title}${step.query ? `：${step.query}` : ""}\n  - ${step.rationale}`)),
     "",
-    "## 候选地点",
+    t(language, "## 搜索语句", "## Search Queries"),
+    list(input.searchQueries.map((query) => `${query.query}（${queryPurposeLabel(query.purpose, language)}）`)),
+    "",
+    t(language, "## 季节与历史影像核验", "## Season and Historical Imagery Check"),
+    list([
+      `${t(language, "判断结果", "Inferred season")}：${input.seasonalAnalysis?.inferredSeason ?? t(language, "未提供", "not provided")}`,
+      ...(input.seasonalAnalysis?.reasoning ?? []),
+      ...(input.seasonalAnalysis?.mapComparisonNotes ?? [])
+    ]),
+    "",
+    t(language, "## 候选地点", "## Candidates"),
     ...input.candidates.map((candidate, index) =>
       [
-        `### 候选 ${index + 1}：${candidate.name ?? "未命名地点"}`,
-        `坐标：${formatCoordinate(candidate.latitude, candidate.longitude)}`,
-        `置信度：${confidenceLabel(candidate.confidence)}`,
-        `地图链接：${candidate.mapLinks.googleMaps}`,
+        `### ${t(language, "候选", "Candidate")} ${index + 1}：${candidate.name ?? t(language, "未命名地点", "Unnamed location")}`,
+        `${t(language, "坐标", "Coordinates")}：${formatCoordinate(candidate.latitude, candidate.longitude)}`,
+        `${t(language, "置信度", "Confidence")}：${confidenceLabel(candidate.confidence, language)}`,
+        `${t(language, "地图链接", "Maps")}：${candidate.mapLinks.googleMaps}`,
         candidate.mapLinks.googleEarthHint ?? "",
+        `${t(language, "Google Maps 地图预览", "Google Maps preview")}：${candidate.mapPreview.googleMapsEmbedUrl}`,
+        `${t(language, "Google Earth 历史影像入口", "Google Earth historical imagery entry")}：${candidate.mapPreview.googleEarthWebUrl}`,
+        `${t(language, "截图状态", "Screenshot status")}：${candidate.mapPreview.screenshotStatus}`,
         "",
-        "匹配证据：",
+        t(language, "匹配证据：", "Matching evidence:"),
         list(candidate.matchingEvidence),
-        "不确定点：",
+        t(language, "不确定点：", "Uncertainty:"),
         list(candidate.uncertainty),
-        "来源：",
+        t(language, "地图预览备注：", "Map preview notes:"),
+        list(candidate.mapPreview.notes),
+        t(language, "来源：", "Sources:"),
         list(candidate.sources.map((source) => `${source.title} - ${source.url} - ${source.note}`)),
-        "Google Earth 核验清单：",
+        t(language, "Google Earth 核验清单：", "Google Earth verification checklist:"),
         list(candidate.earthVerificationChecklist)
       ].join("\n")
     )
