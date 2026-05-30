@@ -6,7 +6,7 @@ export const mockSearchProvider: SearchProvider = {
     return [
       {
         id: "mock-candidate-1",
-        name: "Mock railway candidate for offline MVP",
+        name: "离线模拟铁路候选点",
         latitude: 42.25967,
         longitude: 112.75623,
         confidence: "low",
@@ -15,23 +15,23 @@ export const mockSearchProvider: SearchProvider = {
           googleEarthHint: buildGoogleEarthHint(42.25967, 112.75623)
         },
         matchingEvidence: [
-          "manual/mock candidate keeps the full report flow testable without external APIs",
+          "离线模拟候选用于在没有外部 API 时测试完整报告流程",
           ...args.clues.spatialRelationships.slice(0, 2),
-          ...args.clues.sceneFeatures.slice(0, 3).map((feature) => `visible feature: ${feature}`)
+          ...args.clues.sceneFeatures.slice(0, 3).map((feature) => `可见特征：${feature}`)
         ],
-        uncertainty: ["mock provider is not an authoritative location search result"],
+        uncertainty: ["当前为离线模拟候选，不代表真实定位结论"],
         sources: [
           {
-            title: "Offline mock search provider",
+            title: "离线模拟搜索",
             url: "local://mock-search",
-            note: `Generated from ${args.queries.length} planned search queries`
+            note: `根据 ${args.queries.length} 条计划搜索语句生成`
           }
         ],
         earthVerificationChecklist: [
-          "Confirm railway alignment and number of tracks",
-          "Compare station building position relative to tracks",
-          "Check roads, open ground, towers, and roof colors",
-          "Use historical imagery to confirm whether features changed"
+          "确认铁路走向和轨道数量",
+          "对比车站建筑与铁轨的相对位置",
+          "检查道路、开阔地、通信塔和屋顶颜色",
+          "使用历史影像确认地物是否发生变化"
         ]
       }
     ];

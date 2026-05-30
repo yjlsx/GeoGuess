@@ -44,7 +44,7 @@ const successfulInvestigation: Investigation = {
   ],
   report: {
     summaryMarkdown: "Summary",
-    fullMarkdown: "Full report with evidence",
+    fullMarkdown: "完整报告：包含证据链",
     createdAt: "2026-05-31T00:00:00.000Z"
   }
 };
@@ -153,10 +153,12 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
 
     expect(await screen.findByText("35.68950, 139.69170")).toBeInTheDocument();
+    expect(screen.getByText("高置信")).toBeInTheDocument();
+    expect(screen.queryByText("high")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("查看证据链和核验清单"));
     expect(screen.getByText("JR sign matches")).toBeInTheDocument();
     fireEvent.click(screen.getByText("完整 Markdown 报告"));
-    expect(screen.getByText("Full report with evidence")).toBeInTheDocument();
+    expect(screen.getByText("完整报告：包含证据链")).toBeInTheDocument();
   });
 
   it("keeps manual crop selection disabled", () => {

@@ -29,8 +29,10 @@ describe("runInvestigation", () => {
     expect(result.searchQueries.length).toBeGreaterThan(0);
     expect(result.candidates[0].latitude).toBe(42.25967);
     expect(result.candidates[0].confidence).toBe("low");
-    expect(result.candidates[0].uncertainty).toContain("mock provider is not an authoritative location search result");
-    expect(result.candidates[0].sources[0].title).toBe("Offline mock search provider");
+    expect(result.candidates[0].uncertainty).toContain("当前为离线模拟候选，不代表真实定位结论");
+    expect(result.candidates[0].sources[0].title).toBe("离线模拟搜索");
+    expect(result.report.summaryMarkdown).toContain("低置信");
+    expect(result.report.summaryMarkdown).not.toContain("Low confidence");
   });
 
   it("does not reuse mutable clue arrays when manual clues are omitted", async () => {

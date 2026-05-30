@@ -5,17 +5,17 @@ export const sampleInvestigationInput: ReportInput = {
   userScope: {
     country: "Mongolia",
     region: "Dornogovi",
-    facilityType: "railway station",
+    facilityType: "铁路车站",
     source: "CCTV 7",
-    notes: "China Mongolia joint training"
+    notes: "中蒙联合训练"
   },
   extractedClues: {
     ocrText: ["中蒙 草原伙伴 2026 陆军联合训练"],
     visibleLabels: ["CCTV 7"],
-    languages: ["Chinese"],
-    sceneFeatures: ["railway", "station building", "grassland", "communication tower"],
-    spatialRelationships: ["railway runs horizontally in foreground", "station building behind tracks"],
-    inferredSearchTerms: ["China Mongolia joint training railway station"]
+    languages: ["中文"],
+    sceneFeatures: ["铁路", "车站建筑", "草原", "通信塔"],
+    spatialRelationships: ["铁路在画面前景横向延伸", "车站建筑位于铁轨后方"],
+    inferredSearchTerms: ["中蒙联合训练 铁路车站"]
   },
   searchQueries: [
     {
@@ -27,7 +27,7 @@ export const sampleInvestigationInput: ReportInput = {
   candidates: [
     {
       id: "candidate-1",
-      name: "Railway station near training area",
+      name: "训练区域附近铁路车站",
       latitude: 42.25967,
       longitude: 112.75623,
       confidence: "high",
@@ -36,23 +36,23 @@ export const sampleInvestigationInput: ReportInput = {
         googleEarthHint: buildGoogleEarthHint(42.25967, 112.75623)
       },
       matchingEvidence: [
-        "railway runs horizontally in the image and at the candidate site",
-        "station building appears behind the tracks",
-        "open grassland/desert surroundings match the screenshot"
+        "画面中的铁路走向与候选地点一致",
+        "车站建筑位于铁轨后方",
+        "周边开阔草原/荒漠地貌与截图相符"
       ],
-      uncertainty: ["satellite imagery date may differ from the video date"],
+      uncertainty: ["卫星影像日期可能与视频日期不同"],
       sources: [
         {
-          title: "User-provided image context",
+          title: "用户提供的图片上下文",
           url: "local://uploaded-image",
-          note: "Manual/sample evidence for offline MVP"
+          note: "离线 MVP 的手动/示例证据"
         }
       ],
       earthVerificationChecklist: [
-        "Confirm railway alignment and number of visible tracks",
-        "Check whether station buildings sit north of the tracks",
-        "Compare tower and road positions with the screenshot",
-        "Use historical imagery to check construction changes"
+        "确认铁路走向和可见轨道数量",
+        "检查车站建筑是否位于铁轨北侧",
+        "对比通信塔和道路位置",
+        "使用历史影像检查建筑变化"
       ]
     }
   ]

@@ -14,7 +14,7 @@ describe("mapLinks", () => {
 
   it("builds a Google Earth copy hint", () => {
     expect(buildGoogleEarthHint(42.25967, 112.75623)).toBe(
-      "Copy into Google Earth search: 42.25967, 112.75623"
+      "复制到 Google Earth 搜索：42.25967, 112.75623"
     );
   });
 });

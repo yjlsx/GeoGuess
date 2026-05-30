@@ -8,5 +8,5 @@ export function buildGoogleMapsLink(latitude: number, longitude: number) {
 }
 
 export function buildGoogleEarthHint(latitude: number, longitude: number) {
-  return `Copy into Google Earth search: ${formatCoordinate(latitude, longitude)}`;
+  return `复制到 Google Earth 搜索：${formatCoordinate(latitude, longitude)}`;
 }

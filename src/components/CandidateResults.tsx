@@ -7,6 +7,16 @@ type Props = {
   error: string | null;
 };
 
+function confidenceLabel(confidence: Investigation["candidates"][number]["confidence"]) {
+  const labels = {
+    high: "高置信",
+    medium: "中置信",
+    low: "低置信"
+  };
+
+  return labels[confidence] ?? confidence;
+}
+
 export function CandidateResults({ investigation, loading, error }: Props) {
   if (loading) {
     return (
@@ -44,7 +54,7 @@ export function CandidateResults({ investigation, loading, error }: Props) {
           <article className="candidate" key={candidate.id}>
             <div className="candidate-header">
               <strong>候选 {index + 1}</strong>
-              <span>{candidate.confidence}</span>
+              <span>{confidenceLabel(candidate.confidence)}</span>
             </div>
             <p>{formatCoordinate(candidate.latitude, candidate.longitude)}</p>
             <a href={candidate.mapLinks.googleMaps} target="_blank" rel="noreferrer">
