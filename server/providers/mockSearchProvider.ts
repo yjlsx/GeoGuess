@@ -3,16 +3,13 @@ import type { SearchProvider } from "./types";
 
 export const mockSearchProvider: SearchProvider = {
   async findCandidates(args) {
-    const hasRailway = args.clues.sceneFeatures.some((feature) => feature.toLowerCase().includes("rail"));
-    const confidence = hasRailway ? "high" : "medium";
-
     return [
       {
         id: "mock-candidate-1",
         name: "Mock railway candidate for offline MVP",
         latitude: 42.25967,
         longitude: 112.75623,
-        confidence,
+        confidence: "low",
         mapLinks: {
           googleMaps: buildGoogleMapsLink(42.25967, 112.75623),
           googleEarthHint: buildGoogleEarthHint(42.25967, 112.75623)

@@ -1,17 +1,19 @@
 import type { ExtractedClues } from "../../src/shared/types";
 import type { VisionProvider } from "./types";
 
-const emptyClues: ExtractedClues = {
-  ocrText: [],
-  visibleLabels: [],
-  languages: [],
-  sceneFeatures: [],
-  spatialRelationships: [],
-  inferredSearchTerms: []
-};
+function cloneClues(clues?: ExtractedClues): ExtractedClues {
+  return {
+    ocrText: [...(clues?.ocrText ?? [])],
+    visibleLabels: [...(clues?.visibleLabels ?? [])],
+    languages: [...(clues?.languages ?? [])],
+    sceneFeatures: [...(clues?.sceneFeatures ?? [])],
+    spatialRelationships: [...(clues?.spatialRelationships ?? [])],
+    inferredSearchTerms: [...(clues?.inferredSearchTerms ?? [])]
+  };
+}
 
 export const manualVisionProvider: VisionProvider = {
   async extractClues(request) {
-    return request.manualClues ?? emptyClues;
+    return cloneClues(request.manualClues);
   }
 };

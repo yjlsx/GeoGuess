@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { buildSearchQueries } from "../src/shared/queryPlanner";
 import { buildReports } from "../src/shared/reportGenerator";
 import type { CropMode, ExtractedClues, Investigation, UserScope } from "../src/shared/types";
@@ -6,6 +7,7 @@ import { mockSearchProvider } from "./providers/mockSearchProvider";
 import type { SearchProvider, VisionProvider } from "./providers/types";
 
 export type RunInvestigationInput = {
+  id?: string;
   image: {
     originalPath: string;
     cropPath?: string;
@@ -41,7 +43,7 @@ export async function runInvestigation(input: RunInvestigationInput): Promise<In
   });
 
   return {
-    id: `investigation-${Date.now()}`,
+    id: input.id ?? randomUUID(),
     image: input.image,
     userScope: input.userScope,
     extractedClues,
