@@ -5,7 +5,7 @@ function compact(parts: Array<string | undefined>) {
 }
 
 function pushUnique(queries: SearchQuery[], seen: Set<string>, item: SearchQuery) {
-  const key = `${item.language ?? ""}:${item.query}`;
+  const key = item.query.trim().replace(/\s+/g, " ").toLocaleLowerCase();
   if (!seen.has(key)) {
     seen.add(key);
     queries.push(item);
@@ -16,7 +16,8 @@ export function buildSearchQueries(scope: UserScope, clues: ExtractedClues): Sea
   const queries: SearchQuery[] = [];
   const seen = new Set<string>();
   const place = compact([scope.country, scope.region]).join(" ");
-  const facility = scope.facilityType ?? clues.sceneFeatures.find((feature) => feature.includes("station"));
+  const facility =
+    scope.facilityType ?? clues.sceneFeatures.find((feature) => feature.toLocaleLowerCase().includes("station"));
 
   pushUnique(queries, seen, {
     query: compact([place, facility, scope.source, scope.notes]).join(" "),

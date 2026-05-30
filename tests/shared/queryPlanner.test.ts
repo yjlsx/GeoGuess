@@ -40,4 +40,41 @@ describe("buildSearchQueries", () => {
     const unique = new Set(queries.map((item) => item.query));
     expect(unique.size).toBe(queries.length);
   });
+
+  it("deduplicates normalized query text across language metadata", () => {
+    const queries = buildSearchQueries(
+      {
+        source: "Railway   Station"
+      },
+      {
+        ocrText: [" railway station "],
+        visibleLabels: [],
+        languages: ["Chinese"],
+        sceneFeatures: [],
+        spatialRelationships: [],
+        inferredSearchTerms: []
+      }
+    );
+    const unique = new Set(queries.map((item) => item.query.trim().replace(/\s+/g, " ").toLocaleLowerCase()));
+    expect(unique.size).toBe(queries.length);
+    expect(queries[0]).toEqual({
+      query: "Railway   Station",
+      language: "en",
+      purpose: "scope-source-facility"
+    });
+  });
+
+  it("uses case-insensitive station fallback clues", () => {
+    const queries = buildSearchQueries(
+      {
+        country: "Mongolia"
+      },
+      {
+        ...clues,
+        sceneFeatures: ["Station Building"],
+        inferredSearchTerms: []
+      }
+    );
+    expect(queries[0].query).toBe("Mongolia Station Building");
+  });
 });
