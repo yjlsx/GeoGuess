@@ -1,12 +1,29 @@
 import express from "express";
 import multer from "multer";
+import { pathToFileURL } from "node:url";
 import { z } from "zod";
-import { createAnalysisCrop } from "./imageCrop";
+import { createAnalysisCrop, CropValidationError } from "./imageCrop";
 import { runInvestigation } from "./investigationService";
 import { createInvestigationDir, saveUploadedImage } from "./storage";
 
-const app = express();
+export const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+class ClientInputError extends Error {
+  statusCode = 400;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ClientInputError";
+  }
+}
+
+const manualCropSchema = z.object({
+  left: z.number().int().nonnegative(),
+  top: z.number().int().nonnegative(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive()
+});
 
 const bodySchema = z.object({
   cropMode: z.enum(["full", "upper_half", "manual"]).default("upper_half"),
@@ -25,8 +42,31 @@ const bodySchema = z.object({
       spatialRelationships: z.array(z.string()).default([]),
       inferredSearchTerms: z.array(z.string()).default([])
     })
-    .optional()
+    .optional(),
+  manualCrop: manualCropSchema.optional()
+}).superRefine((body, ctx) => {
+  if (body.cropMode === "manual" && !body.manualCrop) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["manualCrop"],
+      message: "manual crop coordinates are required when cropMode is manual"
+    });
+  }
 });
+
+function parseJsonField(value: unknown, fieldName: string) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new ClientInputError(`${fieldName} must be a JSON string`);
+  }
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new ClientInputError(`${fieldName} must be valid JSON`);
+  }
+}
 
 app.use(express.json());
 
@@ -43,7 +83,8 @@ app.post("/api/investigations", upload.single("image"), async (req, res, next) =
 
     const parsed = bodySchema.parse({
       ...req.body,
-      manualClues: req.body.manualClues ? JSON.parse(req.body.manualClues) : undefined
+      manualClues: parseJsonField(req.body.manualClues, "manualClues"),
+      manualCrop: parseJsonField(req.body.manualCrop, "manualCrop")
     });
 
     const { id, dir } = await createInvestigationDir();
@@ -54,7 +95,8 @@ app.post("/api/investigations", upload.single("image"), async (req, res, next) =
     });
     const cropPath = await createAnalysisCrop({
       imagePath: originalPath,
-      cropMode: parsed.cropMode
+      cropMode: parsed.cropMode,
+      manualCrop: parsed.manualCrop
     });
 
     const investigation = await runInvestigation({
@@ -79,10 +121,32 @@ app.post("/api/investigations", upload.single("image"), async (req, res, next) =
 
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : "Unknown server error";
+  if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+    res.status(413).json({ error: "file too large" });
+    return;
+  }
+  if (error instanceof ClientInputError) {
+    res.status(error.statusCode).json({ error: message });
+    return;
+  }
+  if (error instanceof z.ZodError) {
+    res.status(400).json({ error: error.issues[0]?.message ?? "invalid request body", details: z.treeifyError(error) });
+    return;
+  }
+  if (error instanceof CropValidationError) {
+    res.status(400).json({ error: message });
+    return;
+  }
   res.status(500).json({ error: message });
 });
 
-const port = Number(process.env.PORT ?? 8787);
-app.listen(port, "127.0.0.1", () => {
-  console.log(`Image Geo Finder API listening on http://127.0.0.1:${port}`);
-});
+export function startServer() {
+  const port = Number(process.env.PORT ?? 8787);
+  return app.listen(port, "127.0.0.1", () => {
+    console.log(`Image Geo Finder API listening on http://127.0.0.1:${port}`);
+  });
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  startServer();
+}

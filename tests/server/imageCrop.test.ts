@@ -39,4 +39,51 @@ describe("createAnalysisCrop", () => {
     expect(metadata.width).toBe(8);
     expect(metadata.height).toBe(3);
   });
+
+  it("keeps upper-half crops at least 1px tall", async () => {
+    const imagePath = path.join(tempDir, "thin.jpg");
+    await sharp({
+      create: {
+        width: 8,
+        height: 1,
+        channels: 3,
+        background: "#ffffff"
+      }
+    })
+      .jpeg()
+      .toFile(imagePath);
+
+    const cropPath = await createAnalysisCrop({
+      imagePath,
+      cropMode: "upper_half"
+    });
+    const metadata = await sharp(cropPath).metadata();
+
+    expect(metadata.width).toBe(8);
+    expect(metadata.height).toBe(1);
+  });
+
+  it("normalizes crop outputs to jpg", async () => {
+    const imagePath = path.join(tempDir, "scene.png");
+    await sharp({
+      create: {
+        width: 8,
+        height: 6,
+        channels: 3,
+        background: "#ffffff"
+      }
+    })
+      .png()
+      .toFile(imagePath);
+
+    const cropPath = await createAnalysisCrop({
+      imagePath,
+      cropMode: "manual",
+      manualCrop: { left: 0, top: 0, width: 4, height: 4 }
+    });
+    const metadata = await sharp(cropPath).metadata();
+
+    expect(cropPath).toBe(path.join(tempDir, "scene-manual.jpg"));
+    expect(metadata.format).toBe("jpeg");
+  });
 });

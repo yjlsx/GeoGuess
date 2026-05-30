@@ -29,7 +29,36 @@ describe("storage helpers", () => {
 
     expect(id).toBe("case-123");
     expect(dir).toBe(path.resolve(".data", "investigations", "case-123"));
-    expect(outputPath).toBe(path.join(dir, "street_view_.jpg"));
+    expect(path.dirname(outputPath)).toBe(dir);
+    expect(path.basename(outputPath)).toMatch(/^[0-9a-f-]+-street_view_\.jpg$/);
     await expect(readFile(outputPath, "utf8")).resolves.toBe("image-bytes");
+  });
+
+  it("creates distinct investigation ids for consecutive default calls", async () => {
+    const { createInvestigationDir } = await import("../../server/storage");
+    const first = await createInvestigationDir();
+    const second = await createInvestigationDir();
+
+    expect(first.id).toMatch(/^investigation-[0-9a-f-]+$/);
+    expect(second.id).toMatch(/^investigation-[0-9a-f-]+$/);
+    expect(first.id).not.toBe(second.id);
+    expect(first.dir).not.toBe(second.dir);
+  });
+
+  it("sanitizes path-like upload names and keeps output inside the investigation dir", async () => {
+    const { createInvestigationDir, saveUploadedImage } = await import("../../server/storage");
+    const { dir } = await createInvestigationDir("case-escape");
+
+    const outputPath = await saveUploadedImage({
+      dir,
+      originalName: "../..",
+      buffer: Buffer.from("safe")
+    });
+
+    const resolvedDir = path.resolve(dir);
+    const resolvedOutput = path.resolve(outputPath);
+    expect(resolvedOutput.startsWith(`${resolvedDir}${path.sep}`)).toBe(true);
+    expect(path.basename(outputPath)).toMatch(/^[0-9a-f-]+-upload\.jpg$/);
+    await expect(readFile(outputPath, "utf8")).resolves.toBe("safe");
   });
 });
