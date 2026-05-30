@@ -33,6 +33,13 @@ export function ScopeForm({ value, onChange }: Props) {
         <input value={value.source ?? ""} onChange={(event) => onChange(update(value, "source", event.target.value))} />
       </label>
       <label className="field">
+        时间提示
+        <input
+          value={value.dateOrTimeHint ?? ""}
+          onChange={(event) => onChange(update(value, "dateOrTimeHint", event.target.value))}
+        />
+      </label>
+      <label className="field">
         备注
         <textarea value={value.notes ?? ""} onChange={(event) => onChange(update(value, "notes", event.target.value))} />
       </label>

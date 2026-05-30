@@ -33,6 +33,10 @@ export function ManualCluesForm({ value, onChange }: Props) {
         <textarea value={joinLines(value.visibleLabels)} onChange={(event) => set("visibleLabels", event.target.value)} />
       </label>
       <label className="field">
+        语言
+        <textarea value={joinLines(value.languages)} onChange={(event) => set("languages", event.target.value)} />
+      </label>
+      <label className="field">
         地物特征
         <textarea value={joinLines(value.sceneFeatures)} onChange={(event) => set("sceneFeatures", event.target.value)} />
       </label>

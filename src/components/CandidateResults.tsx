@@ -9,19 +9,31 @@ type Props = {
 
 export function CandidateResults({ investigation, loading, error }: Props) {
   if (loading) {
-    return <section className="panel result-panel">正在分析...</section>;
+    return (
+      <section className="panel result-panel" aria-live="polite" role="status">
+        正在分析...
+      </section>
+    );
   }
 
   if (error) {
-    return <section className="panel result-panel error">{error}</section>;
+    return (
+      <section className="panel result-panel error" aria-live="polite" role="alert">
+        {error}
+      </section>
+    );
   }
 
   if (!investigation) {
-    return <section className="panel result-panel">结果会显示候选坐标、证据链和 Google Earth 核验清单。</section>;
+    return (
+      <section className="panel result-panel" aria-live="polite">
+        结果会显示候选坐标、证据链和 Google Earth 核验清单。
+      </section>
+    );
   }
 
   return (
-    <section className="panel result-panel">
+    <section className="panel result-panel" aria-live="polite">
       <h2>候选结果</h2>
       <div className="clues">
         <h3>线索摘要</h3>

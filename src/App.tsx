@@ -14,6 +14,50 @@ const emptyClues: ExtractedClues = {
   inferredSearchTerms: []
 };
 
+async function getResponseErrorMessage(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const body: unknown = await response.json();
+      if (
+        body &&
+        typeof body === "object" &&
+        "error" in body &&
+        typeof (body as { error: unknown }).error === "string"
+      ) {
+        return (body as { error: string }).error;
+      }
+    } catch {
+      // Fall through to text/status fallback when the server sends invalid JSON.
+    }
+  }
+
+  try {
+    const text = await response.text();
+    if (text) {
+      try {
+        const body: unknown = JSON.parse(text);
+        if (
+          body &&
+          typeof body === "object" &&
+          "error" in body &&
+          typeof (body as { error: unknown }).error === "string"
+        ) {
+          return (body as { error: string }).error;
+        }
+      } catch {
+        return text;
+      }
+      return text;
+    }
+  } catch {
+    // Fall through to status fallback.
+  }
+
+  return response.status ? `请求失败（HTTP ${response.status}）` : "请求失败";
+}
+
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [cropMode, setCropMode] = useState<CropMode>("upper_half");
@@ -41,7 +85,7 @@ export default function App() {
       formData.append("manualClues", JSON.stringify(manualClues));
       const response = await fetch("/api/investigations", { method: "POST", body: formData });
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw new Error(await getResponseErrorMessage(response));
       }
       setInvestigation((await response.json()) as Investigation);
     } catch (caught) {
