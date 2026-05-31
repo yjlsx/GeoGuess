@@ -113,6 +113,19 @@ describe("App", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("renders the sample evidence chain without uploading an image", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "查看示例证据链" }));
+
+    expect(await screen.findByText("42.25967, 112.75623")).toBeInTheDocument();
+    expect(screen.getByText("自动识别线索")).toBeInTheDocument();
+    expect(screen.getByText("Google Maps 地图预览")).toBeInTheDocument();
+    expect(screen.getByText("打开 Google Earth")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("posts the selected image, crop mode, scope fields, and manual clues", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
@@ -200,6 +213,29 @@ describe("App", () => {
     expect(screen.getByText("JR sign matches")).toBeInTheDocument();
     fireEvent.click(screen.getByText("完整 Markdown 报告"));
     expect(screen.getByText("完整报告：包含证据链")).toBeInTheDocument();
+  });
+
+  it("copies candidate coordinates from the evidence card", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText }
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => successfulInvestigation
+    } as Response);
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("上传图片"), {
+      target: { files: [new File(["image-bytes"], "frame.jpg", { type: "image/jpeg" })] }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
+
+    const copyButton = await screen.findByRole("button", { name: "复制坐标" });
+    fireEvent.click(copyButton);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("35.68950, 139.69170"));
   });
 
   it("keeps manual crop selection disabled", () => {

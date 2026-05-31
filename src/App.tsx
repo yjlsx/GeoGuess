@@ -3,6 +3,8 @@ import { CandidateResults } from "./components/CandidateResults";
 import { ImageInput } from "./components/ImageInput";
 import { ManualCluesForm } from "./components/ManualCluesForm";
 import { ScopeForm } from "./components/ScopeForm";
+import { buildReports } from "./shared/reportGenerator";
+import { sampleInvestigationInput } from "./shared/sampleInvestigation";
 import type { CropMode, ExtractedClues, Investigation, OutputLanguage, UserScope } from "./shared/types";
 
 const emptyClues: ExtractedClues = {
@@ -13,6 +15,40 @@ const emptyClues: ExtractedClues = {
   spatialRelationships: [],
   inferredSearchTerms: []
 };
+
+function buildSampleInvestigation(outputLanguage: OutputLanguage): Investigation {
+  const reportInput = {
+    ...sampleInvestigationInput,
+    outputLanguage
+  };
+
+  return {
+    id: "sample-investigation",
+    outputLanguage,
+    image: {
+      originalPath: "local://sample-image",
+      cropMode: "full"
+    },
+    userScope: sampleInvestigationInput.userScope,
+    extractedClues: sampleInvestigationInput.extractedClues,
+    searchQueries: sampleInvestigationInput.searchQueries,
+    searchProcess: sampleInvestigationInput.searchProcess ?? [],
+    imageAnalysis: sampleInvestigationInput.imageAnalysis ?? {
+      recognitionMode: "local-metadata",
+      observations: [],
+      limitations: []
+    },
+    seasonalAnalysis: sampleInvestigationInput.seasonalAnalysis ?? {
+      captureDateHint: "",
+      inferredSeason: "未提供",
+      confidence: "low",
+      reasoning: [],
+      mapComparisonNotes: []
+    },
+    candidates: sampleInvestigationInput.candidates,
+    report: buildReports(reportInput)
+  };
+}
 
 async function getResponseErrorMessage(response: Response) {
   const contentType = response.headers.get("content-type") ?? "";
@@ -97,6 +133,11 @@ export default function App() {
     }
   }
 
+  function showSampleInvestigation() {
+    setError(null);
+    setInvestigation(buildSampleInvestigation(outputLanguage));
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -122,7 +163,12 @@ export default function App() {
             开始分析
           </button>
         </div>
-        <CandidateResults investigation={investigation} loading={loading} error={error} />
+        <CandidateResults
+          investigation={investigation}
+          loading={loading}
+          error={error}
+          onShowSample={showSampleInvestigation}
+        />
       </div>
     </main>
   );

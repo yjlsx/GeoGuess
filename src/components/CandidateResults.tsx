@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Investigation } from "../shared/types";
 import { formatCoordinate } from "../shared/mapLinks";
 
@@ -5,6 +6,7 @@ type Props = {
   investigation: Investigation | null;
   loading: boolean;
   error: string | null;
+  onShowSample?: () => void;
 };
 
 function confidenceLabel(confidence: Investigation["candidates"][number]["confidence"]) {
@@ -31,7 +33,15 @@ function renderList(items: string[], empty = "未提供") {
   );
 }
 
-export function CandidateResults({ investigation, loading, error }: Props) {
+export function CandidateResults({ investigation, loading, error, onShowSample }: Props) {
+  const [copiedCandidateId, setCopiedCandidateId] = useState<string | null>(null);
+
+  async function copyCoordinate(candidate: Investigation["candidates"][number]) {
+    const coordinate = formatCoordinate(candidate.latitude, candidate.longitude);
+    await navigator.clipboard?.writeText(coordinate);
+    setCopiedCandidateId(candidate.id);
+  }
+
   if (loading) {
     return (
       <section className="panel result-panel" aria-live="polite" role="status">
@@ -50,8 +60,14 @@ export function CandidateResults({ investigation, loading, error }: Props) {
 
   if (!investigation) {
     return (
-      <section className="panel result-panel" aria-live="polite">
-        结果会显示候选坐标、证据链和 Google Earth 核验清单。
+      <section className="panel result-panel empty-result" aria-live="polite">
+        <h2>等待分析</h2>
+        <p>结果会显示候选坐标、证据链、地图预览和 Google Earth 核验清单。</p>
+        {onShowSample ? (
+          <button className="secondary-button" type="button" onClick={onShowSample}>
+            查看示例证据链
+          </button>
+        ) : null}
       </section>
     );
   }
@@ -97,7 +113,12 @@ export function CandidateResults({ investigation, loading, error }: Props) {
               <strong>{candidate.name ? `候选 ${index + 1}：${candidate.name}` : `候选 ${index + 1}`}</strong>
               <span>{confidenceLabel(candidate.confidence)}</span>
             </div>
-            <p className="coordinate">{formatCoordinate(candidate.latitude, candidate.longitude)}</p>
+            <div className="coordinate-row">
+              <p className="coordinate">{formatCoordinate(candidate.latitude, candidate.longitude)}</p>
+              <button className="small-button" type="button" onClick={() => void copyCoordinate(candidate)}>
+                {copiedCandidateId === candidate.id ? "已复制" : "复制坐标"}
+              </button>
+            </div>
             <div className="map-preview-grid">
               <div className="map-preview">
                 <div className="map-preview-header">

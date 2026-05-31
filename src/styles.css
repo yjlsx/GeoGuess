@@ -124,8 +124,34 @@ textarea {
   cursor: wait;
 }
 
+.secondary-button,
+.small-button {
+  border: 1px solid #bfd0df;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #125d9c;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondary-button {
+  justify-self: start;
+  padding: 10px 14px;
+}
+
+.small-button {
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
 .result-panel {
   min-height: 520px;
+}
+
+.empty-result {
+  display: grid;
+  align-content: start;
+  gap: 12px;
 }
 
 .muted {
@@ -198,6 +224,14 @@ textarea {
 .coordinate {
   font-size: 20px;
   font-weight: 750;
+}
+
+.coordinate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .map-preview-grid {
