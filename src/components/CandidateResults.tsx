@@ -62,7 +62,7 @@ export function CandidateResults({ investigation, loading, error, onShowSample }
     return (
       <section className="panel result-panel empty-result" aria-live="polite">
         <h2>等待分析</h2>
-        <p>结果会显示候选坐标、证据链、地图预览和 Google Earth 核验清单。</p>
+        <p>结果会显示候选坐标、证据链、卫星图像预览和 Google Earth 核验清单。</p>
         {onShowSample ? (
           <button className="secondary-button" type="button" onClick={onShowSample}>
             查看示例证据链
@@ -122,13 +122,13 @@ export function CandidateResults({ investigation, loading, error, onShowSample }
             <div className="map-preview-grid">
               <div className="map-preview">
                 <div className="map-preview-header">
-                  <strong>Google Maps 地图预览</strong>
+                  <strong>Google Maps 卫星图像预览</strong>
                   <a href={candidate.mapLinks.googleMaps} target="_blank" rel="noreferrer">
                     打开 Maps
                   </a>
                 </div>
                 <iframe
-                  title={`候选 ${index + 1} Google Maps 预览`}
+                  title={`候选 ${index + 1} Google Maps 卫星图像预览`}
                   src={candidate.mapPreview.googleMapsEmbedUrl}
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"

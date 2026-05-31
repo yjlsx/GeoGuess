@@ -64,9 +64,9 @@ const successfulInvestigation: Investigation = {
         googleEarthHint: "Check platform geometry in Google Earth."
       },
       mapPreview: {
-        googleMapsEmbedUrl: "https://maps.example.test/embed?q=35.6895,139.6917",
+        googleMapsEmbedUrl: "https://maps.example.test/embed?q=35.6895,139.6917&t=k",
         googleEarthWebUrl: "https://earth.example.test/search/35.6895,139.6917",
-        screenshotStatus: "当前使用 Google Maps 嵌入预览；Earth 历史影像需要打开核验。",
+        screenshotStatus: "当前默认使用 Google Maps 卫星图像预览；Earth 历史影像需要打开核验。",
         notes: ["对比轨道方向、塔楼相对位置和道路边界"]
       },
       matchingEvidence: ["JR sign matches"],
@@ -121,7 +121,7 @@ describe("App", () => {
 
     expect(await screen.findByText("42.25967, 112.75623")).toBeInTheDocument();
     expect(screen.getByText("自动识别线索")).toBeInTheDocument();
-    expect(screen.getByText("Google Maps 地图预览")).toBeInTheDocument();
+    expect(screen.getByText("Google Maps 卫星图像预览")).toBeInTheDocument();
     expect(screen.getByText("打开 Google Earth")).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -207,8 +207,8 @@ describe("App", () => {
     expect(screen.getByText("自动识别线索")).toBeInTheDocument();
     expect(screen.getByText("搜索过程")).toBeInTheDocument();
     expect(screen.getByText("季节与历史影像")).toBeInTheDocument();
-    const mapFrame = screen.getByTitle("候选 1 Google Maps 预览");
-    expect(mapFrame).toHaveAttribute("src", "https://maps.example.test/embed?q=35.6895,139.6917");
+    const mapFrame = screen.getByTitle("候选 1 Google Maps 卫星图像预览");
+    expect(mapFrame).toHaveAttribute("src", "https://maps.example.test/embed?q=35.6895,139.6917&t=k");
     fireEvent.click(screen.getByText("查看完整证据链"));
     expect(screen.getByText("JR sign matches")).toBeInTheDocument();
     fireEvent.click(screen.getByText("完整 Markdown 报告"));

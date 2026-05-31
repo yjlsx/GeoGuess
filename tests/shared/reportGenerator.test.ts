@@ -19,7 +19,7 @@ describe("buildReports", () => {
     expect(report.fullMarkdown).toContain("## 提取到的线索");
     expect(report.fullMarkdown).toContain("## 搜索过程");
     expect(report.fullMarkdown).toContain("## 季节与历史影像核验");
-    expect(report.fullMarkdown).toContain("Google Maps 地图预览");
+    expect(report.fullMarkdown).toContain("Google Maps 卫星图像预览");
     expect(report.fullMarkdown).toContain("铁路在画面前景横向延伸");
     expect(report.fullMarkdown).toContain("复制到 Google Earth 搜索");
     expect(report.fullMarkdown).not.toContain("## Extracted Clues");

@@ -26,7 +26,7 @@ describe("mapLinks", () => {
 
   it("builds embeddable Google Maps and Google Earth verification URLs", () => {
     expect(buildGoogleMapsEmbedUrl(42.25967, 112.75623)).toBe(
-      "https://maps.google.com/maps?q=42.25967%2C112.75623&z=16&output=embed"
+      "https://maps.google.com/maps?q=42.25967%2C112.75623&t=k&z=16&output=embed"
     );
     expect(buildGoogleEarthWebUrl(42.25967, 112.75623)).toBe(
       "https://earth.google.com/web/search/42.25967%2C112.75623"

@@ -64,7 +64,7 @@ export const sampleInvestigationInput: ReportInput = {
       mapPreview: {
         googleMapsEmbedUrl: buildGoogleMapsEmbedUrl(42.25967, 112.75623),
         googleEarthWebUrl: buildGoogleEarthWebUrl(42.25967, 112.75623),
-        screenshotStatus: "当前为 Google Maps 嵌入预览；Google Earth 历史影像需要打开后按日期核验。",
+        screenshotStatus: "当前为 Google Maps 卫星图像预览；Google Earth 历史影像需要打开后按日期核验。",
         notes: ["优先对比铁路走向、站房位置、通信塔和道路交叉点。"]
       },
       matchingEvidence: [

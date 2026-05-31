@@ -142,7 +142,7 @@ export default function App() {
     <main className="app-shell">
       <header className="app-header">
         <h1>Image Geo Finder</h1>
-        <p>上传截图，自动整理线索，生成候选证据链、地图预览和 Google Earth 核验清单。</p>
+        <p>上传截图，自动整理线索，生成候选证据链、卫星图像预览和 Google Earth 核验清单。</p>
       </header>
       <div className="workspace">
         <div className="input-column">

@@ -22,9 +22,9 @@ export const mockSearchProvider: SearchProvider = {
         mapPreview: {
           googleMapsEmbedUrl: buildGoogleMapsEmbedUrl(42.25967, 112.75623),
           googleEarthWebUrl: buildGoogleEarthWebUrl(42.25967, 112.75623),
-          screenshotStatus: "当前本地版使用 Google Maps 嵌入预览；Google Earth 历史影像需要打开后按日期手动核验。",
+          screenshotStatus: "当前本地版默认使用 Google Maps 卫星图像预览；Google Earth 历史影像需要打开后按日期手动核验。",
           notes: [
-            "地图预览用于快速检查道路、轨道和建筑相对位置。",
+            "卫星图像预览用于快速检查道路、轨道和建筑相对位置。",
             "如果需要正式截图，可打开 Google Maps 或 Google Earth 后保存当前视角。"
           ]
         },

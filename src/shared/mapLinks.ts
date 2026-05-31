@@ -9,7 +9,7 @@ export function buildGoogleMapsLink(latitude: number, longitude: number) {
 
 export function buildGoogleMapsEmbedUrl(latitude: number, longitude: number) {
   const query = encodeURIComponent(`${latitude.toFixed(5)},${longitude.toFixed(5)}`);
-  return `https://maps.google.com/maps?q=${query}&z=16&output=embed`;
+  return `https://maps.google.com/maps?q=${query}&t=k&z=16&output=embed`;
 }
 
 export function buildGoogleEarthHint(latitude: number, longitude: number) {
