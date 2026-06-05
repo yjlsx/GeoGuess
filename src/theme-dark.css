@@ -1,0 +1,723 @@
+/* =====================================================================
+   GeoGuess — Dark professional (OSINT) theme
+   ---------------------------------------------------------------------
+   This file is a cascade overlay loaded AFTER styles.css. It only
+   changes colors / backgrounds / borders / shadows; it never touches
+   layout, grid or responsive geometry, so the existing structure and
+   breakpoints keep working. Most rules are scoped under .app-shell to
+   guarantee they win over the base palette regardless of bundle order.
+   To revert the dark look, simply remove the import in main.tsx.
+   ===================================================================== */
+
+:root {
+  color: #e7edf7;
+  background: #0a0f1a;
+  --ink: #e7edf7;
+  --navy: #0a1322;
+  --navy-2: #0d1c30;
+  --surface: #131c2e;
+  --surface-soft: #0e1626;
+  --border: #27344c;
+  --muted: #93a3bd;
+  --teal: #2dd4bf;
+  --teal-soft: #0f2b2a;
+  --blue: #60a5fa;
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+}
+
+body,
+.app-shell {
+  background: #0a0f1a;
+  color: #e7edf7;
+}
+
+/* ---- Header ---- */
+.app-shell .app-header {
+  background: linear-gradient(90deg, #0a1322, #0d1f36);
+  box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.16), 0 6px 18px rgba(0, 0, 0, 0.55);
+}
+
+.app-shell .nav-popover,
+.app-shell .settings-popover .config-panel {
+  border-color: #27344c;
+  background: #131c2e;
+  color: #e7edf7;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.6);
+}
+
+.app-shell .nav-popover span {
+  color: #93a3bd;
+}
+
+.app-shell .nav-popover button {
+  border-color: #2d3c57;
+  background: #0e1626;
+  color: #5eead4;
+}
+
+.app-shell .user-chip {
+  background: #1d4ed8;
+}
+
+/* ---- Status bar ---- */
+.app-shell .workbench-status-bar {
+  border-color: #27344c;
+  background: #131c2e;
+  box-shadow: var(--shadow);
+}
+
+.app-shell .status-pill {
+  border-right-color: #27344c;
+  background: #131c2e;
+}
+
+.app-shell .status-pill.ready {
+  background: #122031;
+}
+
+.app-shell .status-pill span {
+  color: #93a3bd;
+}
+
+.app-shell .status-pill strong {
+  color: #e7edf7;
+}
+
+.app-shell .status-pill.ready strong {
+  color: #5eead4;
+}
+
+.app-shell .status-pill.in-progress strong {
+  color: #93c5fd;
+}
+
+.app-shell .status-pill.error-pill strong {
+  color: #fca5a5;
+}
+
+.app-shell .status-pill::before {
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+
+.app-shell .status-pill:not(.ready):not(.in-progress)::before {
+  border-color: #475569;
+  color: #64748b;
+}
+
+.app-shell .status-progress {
+  background: #1c293f;
+}
+
+/* ---- Panels / cards ---- */
+.app-shell .panel,
+.app-shell .analysis-action-panel {
+  border-color: #27344c;
+  background: #131c2e;
+  box-shadow: var(--shadow);
+}
+
+.app-shell .section-heading,
+.app-shell .config-heading {
+  border-bottom-color: #243149;
+}
+
+.app-shell .section-heading h2,
+.app-shell .panel h2,
+.app-shell .config-heading h2,
+.app-shell .subsection-heading h3,
+.app-shell .card-title-row h3,
+.app-shell .evidence-card h3,
+.app-shell .evidence-card h4,
+.app-shell .candidate-workbench h3,
+.app-shell .map-verification-section h3 {
+  color: #f3f7fc;
+}
+
+.app-shell .section-heading p,
+.app-shell .config-heading p,
+.app-shell .subsection-heading p,
+.app-shell .hint,
+.app-shell .analysis-action-panel p,
+.app-shell .result-empty-header p {
+  color: #93a3bd;
+}
+
+.app-shell .step-number {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+/* ---- Form fields ---- */
+.app-shell .field {
+  color: #c5d2e3;
+}
+
+.app-shell .field input,
+.app-shell .field select,
+.app-shell .field textarea {
+  border-color: #2d3c57;
+  background: #0e1626;
+  color: #e7edf7;
+}
+
+.app-shell .field input::placeholder,
+.app-shell .field textarea::placeholder {
+  color: #5f7characters;
+}
+
+.app-shell .field input:focus,
+.app-shell .field select:focus,
+.app-shell .field textarea:focus {
+  border-color: #2dd4bf;
+  background: #101a2c;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18);
+}
+
+.app-shell .field select option {
+  background: #0e1626;
+  color: #e7edf7;
+}
+
+/* ---- Upload / asset rows ---- */
+.app-shell .upload-dropzone {
+  border-color: #34435f;
+  background: #0e1626;
+  color: #aebed4;
+}
+
+.app-shell .upload-icon {
+  border-color: #34435f;
+  color: #5eead4;
+}
+
+.app-shell .upload-dropzone strong {
+  color: #e7edf7;
+}
+
+.app-shell .upload-dropzone small {
+  color: #8294ad;
+}
+
+.app-shell .asset-file-row {
+  border-color: #2a3852;
+  background: #101a2c;
+}
+
+.app-shell .asset-file-row strong {
+  color: #e7edf7;
+}
+
+.app-shell .asset-file-row span {
+  color: #93a3bd;
+}
+
+.app-shell .asset-file-row button,
+.app-shell .asset-row-static-close {
+  color: #cbd5e1;
+}
+
+.app-shell .asset-thumb {
+  background: #1c293f;
+}
+
+/* ---- Model summary ---- */
+.app-shell .model-summary {
+  border-color: #2a3852;
+  background: #101a2c;
+}
+
+.app-shell .model-summary.ready {
+  border-color: #1f5a4a;
+  background: #0f2b2a;
+}
+
+.app-shell .model-summary span,
+.app-shell .model-summary-grid span {
+  color: #93a3bd;
+}
+
+.app-shell .model-summary strong,
+.app-shell .model-summary-grid strong {
+  color: #e7edf7;
+}
+
+.app-shell .model-summary small {
+  color: #8294ad;
+}
+
+.app-shell .model-summary-grid div {
+  border-color: #243149;
+  background: #0e1626;
+}
+
+.app-shell .model-fetch-row span {
+  color: #5eead4;
+}
+
+/* ---- Scope / misc controls ---- */
+.app-shell .scope-mode-note {
+  border-color: #2a3852;
+  background: #101a2c;
+  color: #aebed4;
+}
+
+.app-shell .threshold-output {
+  border-color: #2d3c57;
+  background: #0e1626;
+  color: #cbd5e1;
+}
+
+.app-shell .range-ticks {
+  color: #8294ad;
+}
+
+.app-shell .toggle-row {
+  color: #c5d2e3;
+}
+
+.app-shell .toggle-switch {
+  background: #334155;
+}
+
+.app-shell .toggle-switch.enabled {
+  background: #2dd4bf;
+}
+
+.app-shell .segment-control {
+  border-color: #2d3c57;
+  background: #0e1626;
+}
+
+.app-shell .segment-control button {
+  color: #93a3bd;
+}
+
+.app-shell .segment-control button.active {
+  background: #14b8a6;
+  color: #04231f;
+}
+
+/* ---- Buttons ---- */
+.app-shell .primary-button {
+  background: linear-gradient(90deg, #14b8a6, #0ea5e9);
+  color: #04121a;
+  box-shadow: 0 10px 22px rgba(13, 148, 136, 0.32);
+}
+
+.app-shell .reset-button {
+  color: #7dd3fc;
+}
+
+.app-shell .secondary-button,
+.app-shell .small-button {
+  border-color: #2d3c57;
+  background: #101a2c;
+  color: #7dd3fc;
+}
+
+.app-shell .save-status {
+  color: #5eead4;
+}
+
+.app-shell .inline-action,
+.app-shell .icon-button {
+  border-color: #2d3c57;
+  background: #101a2c;
+  color: #7dd3fc;
+}
+
+/* ---- Alerts / notices ---- */
+.app-shell .inline-error,
+.app-shell .error {
+  border-color: #6e2b2e;
+  background: #2a1416;
+  color: #fca5a5;
+}
+
+.app-shell .threshold-review-note {
+  border-color: #6b521b;
+  background: #2c2410;
+  color: #fcd34d;
+}
+
+.app-shell .workbench-count {
+  border-color: #2d3c57;
+  background: #101a2c;
+  color: #93a3bd;
+}
+
+.app-shell .workbench-count.ready {
+  border-color: #1f5a4a;
+  background: #0f2b2a;
+  color: #5eead4;
+}
+
+.app-shell .result-toolbar {
+  border-bottom-color: #243149;
+}
+
+/* ---- Summary board cards ---- */
+.app-shell .best-candidate-card,
+.app-shell .distribution-card,
+.app-shell .field-checklist,
+.app-shell .evidence-card,
+.app-shell .candidate,
+.app-shell .candidate-table-wrap {
+  border-color: #27344c;
+  background: #131c2e;
+}
+
+.app-shell .card-title-row span,
+.app-shell .card-title-row strong {
+  color: #93a3bd;
+}
+
+.app-shell .hero-coordinate,
+.app-shell .coordinate {
+  color: #5eead4;
+}
+
+.app-shell .candidate-metrics {
+  border-top-color: #243149;
+  border-left-color: #243149;
+}
+
+.app-shell .candidate-metrics div {
+  border-right-color: #243149;
+  border-bottom-color: #243149;
+}
+
+.app-shell .candidate-metrics dt {
+  color: #93a3bd;
+}
+
+.app-shell .candidate-metrics dd {
+  color: #e7edf7;
+}
+
+.app-shell .eyebrow {
+  color: #5eead4;
+}
+
+/* ---- Maps / earth placeholders ---- */
+.app-shell .map-placeholder,
+.app-shell .map-link-card {
+  background: #101a2c;
+  color: #93a3bd;
+}
+
+.app-shell .map-link-card strong {
+  color: #5eead4;
+}
+
+.app-shell .candidate-distribution-map {
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    #0e1626;
+}
+
+.app-shell .distribution-map-attribution {
+  background: rgba(10, 15, 26, 0.82);
+  color: #aebed4;
+}
+
+.app-shell .earth-screenshot-slot,
+.app-shell .map-preview,
+.app-shell .earth-preview {
+  border-color: #27344c;
+  background: #131c2e;
+}
+
+.app-shell .earth-screenshot-header,
+.app-shell .map-preview-header {
+  border-bottom-color: #243149;
+}
+
+.app-shell .earth-placeholder {
+  background: #101a2c;
+  color: #c5d2e3;
+}
+
+.app-shell .earth-placeholder span {
+  color: #e7edf7;
+}
+
+.app-shell .earth-placeholder p {
+  color: #aebed4;
+}
+
+.app-shell .earth-placeholder .earth-coordinate {
+  border-color: #2d3c57;
+  background: #0e1626;
+  color: #5eead4;
+}
+
+.app-shell .earth-checklist {
+  color: #aebed4;
+}
+
+.app-shell .earth-placeholder.compact {
+  border-color: #2d3c57;
+}
+
+.app-shell .earth-preview a,
+.app-shell .map-preview-header a,
+.app-shell .earth-screenshot-header a,
+.app-shell .candidate a {
+  color: #7dd3fc;
+}
+
+/* ---- Field checklist bullets ---- */
+.app-shell .field-checklist li {
+  color: #c5d2e3;
+}
+
+.app-shell .field-checklist li::before {
+  background: #0f2b2a;
+  color: #6ee7b7;
+}
+
+.app-shell .field-checklist li.check-warn::before {
+  background: #2c2410;
+  color: #fcd34d;
+}
+
+.app-shell .field-checklist li.check-bad::before {
+  background: #2a1416;
+  color: #fca5a5;
+}
+
+.app-shell .field-checklist li.check-muted::before {
+  background: #1c293f;
+  color: #64748b;
+}
+
+/* ---- Readiness grid ---- */
+.app-shell .readiness-item {
+  border-color: #27344c;
+  background: #101a2c;
+}
+
+.app-shell .readiness-item strong {
+  color: #e7edf7;
+}
+
+.app-shell .readiness-item span {
+  color: #93a3bd;
+}
+
+.app-shell .readiness-item.ready {
+  border-color: #1f5a4a;
+  background: #0f2b2a;
+}
+
+/* ---- Analysis log ---- */
+.app-shell .analysis-card-heading strong {
+  color: #5eead4;
+}
+
+.app-shell .analysis-progress {
+  background: #1c293f;
+}
+
+.app-shell .analysis-log li::before {
+  border-color: #1f5a4a;
+  color: #5eead4;
+}
+
+.app-shell .analysis-log li.process-pending::before {
+  border-color: #475569;
+  color: #64748b;
+}
+
+.app-shell .analysis-log li.process-active::before {
+  border-color: #2563eb;
+  color: #93c5fd;
+}
+
+.app-shell .analysis-log span {
+  color: #aebed4;
+}
+
+.app-shell .empty-candidate-note {
+  border-color: #2a3852;
+  background: #101a2c;
+}
+
+.app-shell .empty-candidate-note ul {
+  color: #aebed4;
+}
+
+/* ---- Trace strip ---- */
+.app-shell .trace-strip {
+  border-color: #27344c;
+  background: #101a2c;
+}
+
+.app-shell .trace-strip-heading h3 {
+  color: #f3f7fc;
+}
+
+.app-shell .trace-strip-heading span,
+.app-shell .trace-strip-grid span {
+  color: #5eead4;
+}
+
+.app-shell .trace-empty {
+  color: #93a3bd;
+}
+
+.app-shell .trace-strip-grid strong {
+  color: #c5d2e3;
+}
+
+.app-shell .trace-query-card button,
+.app-shell .trace-query-card a {
+  border-color: #2d3c57;
+  background: #0e1626;
+  color: #7dd3fc;
+}
+
+.app-shell .trace-chip-row span,
+.app-shell .trace-strip-grid em,
+.app-shell .trace-query-row code {
+  border-color: #2a3852;
+  background: #0e1626;
+  color: #aebed4;
+}
+
+.app-shell .trace-query-row code {
+  color: #7dd3fc;
+}
+
+.app-shell .feature-row span {
+  border-color: #1f5a4a;
+  background: #0f2b2a;
+  color: #6ee7b7;
+}
+
+/* ---- Comparison table ---- */
+.app-shell .candidate-comparison-table th,
+.app-shell .candidate-comparison-table td {
+  border-bottom-color: #243149;
+  color: #d4deec;
+}
+
+.app-shell .candidate-comparison-table thead th {
+  color: #93a3bd;
+  background: #101a2c;
+}
+
+.app-shell .candidate-comparison-table th small {
+  color: #8294ad;
+}
+
+.app-shell .candidate-comparison-table tbody tr.review-confirmed {
+  background: #0f2b2a;
+}
+
+.app-shell .candidate-comparison-table tbody tr.review-excluded {
+  background: #2a1416;
+  color: #f4b7b0;
+}
+
+.app-shell .candidate-comparison-table tbody tr.selected-candidate-row {
+  background: #102a33;
+  box-shadow: inset 3px 0 0 #2dd4bf;
+}
+
+.app-shell .score-meter {
+  background: #1c293f;
+}
+
+.app-shell .score-meter span {
+  background: #2dd4bf;
+}
+
+.app-shell .view-candidate-button {
+  border-color: #1f5a4a;
+  background: #0f2b2a;
+  color: #5eead4;
+}
+
+/* ---- Candidate cards / badges ---- */
+.app-shell .candidate-badges > span:first-child {
+  background: #0f2b2a;
+  color: #6ee7b7;
+}
+
+.app-shell .review-status-pending {
+  background: #1c293f;
+  color: #aebed4;
+}
+
+.app-shell .review-status-keep {
+  background: #2c2410;
+  color: #fcd34d;
+}
+
+.app-shell .review-status-excluded {
+  background: #2a1416;
+  color: #fca5a5;
+}
+
+.app-shell .review-status-confirmed {
+  background: #0f2b2a;
+  color: #6ee7b7;
+}
+
+.app-shell .consistency-good {
+  background: #0f2b2a;
+  color: #6ee7b7;
+}
+
+.app-shell .consistency-warn {
+  background: #2c2410;
+  color: #fcd34d;
+}
+
+.app-shell .consistency-bad {
+  background: #2a1416;
+  color: #fca5a5;
+}
+
+.app-shell .candidate-verification-grid > div {
+  border-color: #27344c;
+  background: #101a2c;
+}
+
+.app-shell .verification-score span {
+  color: #93a3bd;
+}
+
+/* ---- OSINT link cards ---- */
+.app-shell .osint-links-panel {
+  border-color: #27344c;
+  background: #131c2e;
+}
+
+.app-shell .osint-link-grid a {
+  border-color: #27344c;
+  background: #101a2c;
+}
+
+.app-shell .osint-link-grid span {
+  color: #93a3bd;
+}
+
+/* ---- Report ---- */
+.app-shell .report pre {
+  background: #0e1626;
+  color: #d4deec;
+}
+
+/* ---- Generic helpers ---- */
+.app-shell .muted {
+  color: #8294ad;
+}
+
+.app-shell .candidate-comparison-table tbody tr:hover {
+  background: #16223a;
+}
