@@ -17,6 +17,7 @@ import type { CropMode, Investigation, OutputLanguage, UserScope, VisionModelCon
 const settingsStorageKey = "imageGeoFinder.settings";
 const historyStorageKey = "imageGeoFinder.history";
 const latestInvestigationStorageKey = "imageGeoFinder.latestInvestigation";
+const historyLimit = 12;
 const defaultScope: UserScope = {
   regionScope: "custom",
   boundaryMode: "rectangle",
@@ -33,6 +34,9 @@ type HistoryItem = {
   assetName: string;
   candidateCount: number;
   createdAt: string;
+  investigation?: Investigation;
+  analysisStartedAt?: number | null;
+  analysisFinishedAt?: number | null;
 };
 
 type SavedInvestigationState = {
@@ -72,6 +76,25 @@ function formatStatusDate(timestamp: number | null) {
   }).format(new Date(timestamp));
 }
 
+function formatHistoryDate(value: string | number | null | undefined) {
+  if (!value) {
+    return "时间未知";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "时间未知";
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
+}
+
 function formatElapsed(startedAt: number | null, finishedAt: number | null, now: number) {
   if (!startedAt) {
     return "--";
@@ -97,6 +120,19 @@ function estimateAnalysisProgress(startedAt: number, now: number) {
     return Math.min(86, 71 + Math.floor((elapsedSeconds - 60) * 0.13));
   }
   return 86;
+}
+
+function getAssetName(investigation: Investigation) {
+  return investigation.image.originalPath.split(/[\\/]/).pop() ?? "未命名素材";
+}
+
+function bestCandidateName(investigation: Investigation | null) {
+  return investigation?.candidates[0]?.name ?? "无候选名称";
+}
+
+function bestCandidateScore(investigation: Investigation | null) {
+  const score = investigation?.candidates[0]?.matchScore;
+  return typeof score === "number" ? `${Math.round(score * 100)}%` : "--";
 }
 
 function WorkbenchStatus({
@@ -222,7 +258,22 @@ function loadSavedSettings(): SavedSettings {
 function loadHistory(): HistoryItem[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(historyStorageKey) ?? "[]") as HistoryItem[];
-    return Array.isArray(parsed) ? parsed.slice(0, 6) : [];
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((entry) => entry && typeof entry.id === "string" && typeof entry.assetName === "string")
+      .map((entry) => ({
+        id: entry.id,
+        assetName: entry.assetName,
+        candidateCount: typeof entry.candidateCount === "number" ? entry.candidateCount : entry.investigation?.candidates.length ?? 0,
+        createdAt: typeof entry.createdAt === "string" ? entry.createdAt : new Date().toISOString(),
+        investigation: entry.investigation,
+        analysisStartedAt: typeof entry.analysisStartedAt === "number" ? entry.analysisStartedAt : null,
+        analysisFinishedAt: typeof entry.analysisFinishedAt === "number" ? entry.analysisFinishedAt : null
+      }))
+      .slice(0, historyLimit);
   } catch {
     return [];
   }
@@ -380,10 +431,12 @@ export default function App() {
   );
   const [scope, setScope] = useState<UserScope>(defaultScope);
   const [investigation, setInvestigation] = useState<Investigation | null>(savedInvestigation?.investigation ?? null);
+  const [comparisonInvestigation, setComparisonInvestigation] = useState<Investigation | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [historyStatus, setHistoryStatus] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [modelListStatus, setModelListStatus] = useState<string | null>(null);
   const [modelListLoading, setModelListLoading] = useState(false);
@@ -396,7 +449,7 @@ export default function App() {
   const [history, setHistory] = useState<HistoryItem[]>(loadHistory);
   const hasVisionKey = Boolean(visionConfig.apiKey?.trim());
   const candidateCount = investigation?.candidates.length ?? 0;
-  const assetName = files[0]?.name ?? (investigation ? investigation.image.originalPath.split(/[\\/]/).pop() ?? null : null);
+  const assetName = files[0]?.name ?? (investigation ? getAssetName(investigation) : null);
   const selectedModelName = visionConfig.model?.trim() || "gpt-4o";
 
   useEffect(() => {
@@ -420,8 +473,10 @@ export default function App() {
   function handleFileChange(nextFiles: File[]) {
     setFiles(nextFiles);
     setInvestigation(null);
+    setComparisonInvestigation(null);
     setError(null);
     setExportStatus(null);
+    setHistoryStatus(null);
     setAnalysisStartedAt(null);
     setAnalysisFinishedAt(null);
     setAnalysisProgress(0);
@@ -432,16 +487,23 @@ export default function App() {
     setScope((current) => ({ ...current, notes: notes || undefined }));
   }
 
-  function rememberInvestigation(nextInvestigation: Investigation) {
-    const item = {
+  function persistHistory(nextHistory: HistoryItem[]) {
+    localStorage.setItem(historyStorageKey, JSON.stringify(nextHistory));
+  }
+
+  function rememberInvestigation(nextInvestigation: Investigation, startedAt: number | null, finishedAt: number | null) {
+    const item: HistoryItem = {
       id: nextInvestigation.id,
-      assetName: nextInvestigation.image.originalPath.split(/[\\/]/).pop() ?? "未命名素材",
+      assetName: getAssetName(nextInvestigation),
       candidateCount: nextInvestigation.candidates.length,
-      createdAt: new Date().toISOString()
+      createdAt: nextInvestigation.report?.createdAt || new Date().toISOString(),
+      investigation: nextInvestigation,
+      analysisStartedAt: startedAt,
+      analysisFinishedAt: finishedAt
     };
     setHistory((current) => {
-      const nextHistory = [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, 6);
-      localStorage.setItem(historyStorageKey, JSON.stringify(nextHistory));
+      const nextHistory = [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, historyLimit);
+      persistHistory(nextHistory);
       return nextHistory;
     });
   }
@@ -457,6 +519,61 @@ export default function App() {
     );
   }
 
+  function restoreHistoryItem(entry: HistoryItem) {
+    if (!entry.investigation) {
+      setHistoryStatus("这条旧历史记录缺少完整快照，无法重新打开。请用新版重新分析一次后再保存。");
+      return;
+    }
+
+    setFiles([]);
+    setInvestigation(entry.investigation);
+    setComparisonInvestigation(null);
+    setError(null);
+    setExportStatus(null);
+    setHistoryStatus(`已重新打开：${entry.assetName}`);
+    setAnalysisStartedAt(entry.analysisStartedAt ?? null);
+    setAnalysisFinishedAt(entry.analysisFinishedAt ?? null);
+    setAnalysisProgress(100);
+    rememberLatestInvestigation(entry.investigation, entry.analysisStartedAt ?? null, entry.analysisFinishedAt ?? null);
+    setActiveMenu(null);
+  }
+
+  function compareHistoryItem(entry: HistoryItem) {
+    if (!investigation) {
+      setHistoryStatus("请先打开或完成一个当前调查，再选择历史记录进行对比。");
+      return;
+    }
+    if (!entry.investigation) {
+      setHistoryStatus("这条旧历史记录缺少完整快照，无法对比。请用新版重新分析一次后再保存。");
+      return;
+    }
+    if (entry.investigation.id === investigation.id) {
+      setHistoryStatus("当前调查与所选历史记录相同，无需对比。");
+      return;
+    }
+
+    setComparisonInvestigation(entry.investigation);
+    setHistoryStatus(`正在对比：${entry.assetName}`);
+    setActiveMenu(null);
+  }
+
+  function deleteHistoryItem(id: string) {
+    setHistory((current) => {
+      const nextHistory = current.filter((entry) => entry.id !== id);
+      persistHistory(nextHistory);
+      return nextHistory;
+    });
+    setComparisonInvestigation((current) => (current?.id === id ? null : current));
+    setHistoryStatus("已删除该条历史记录。");
+  }
+
+  function clearHistory() {
+    setHistory([]);
+    setComparisonInvestigation(null);
+    persistHistory([]);
+    setHistoryStatus("历史记录已清空，当前打开的调查不会受影响。");
+  }
+
   function settingsForStorage() {
     const { apiKey: _apiKey, ...safeVisionConfig } = visionConfig;
     return {
@@ -468,6 +585,8 @@ export default function App() {
   async function analyze() {
     setError(null);
     setExportStatus(null);
+    setHistoryStatus(null);
+    setComparisonInvestigation(null);
     setAnalysisStartedAt(null);
     setAnalysisFinishedAt(null);
     setAnalysisProgress(0);
@@ -520,7 +639,7 @@ export default function App() {
       const nextInvestigation = (await response.json()) as Investigation;
       const finishedAt = Date.now();
       setInvestigation(nextInvestigation);
-      rememberInvestigation(nextInvestigation);
+      rememberInvestigation(nextInvestigation, startedAt, finishedAt);
       setAnalysisProgress(100);
       setAnalysisFinishedAt(finishedAt);
       rememberLatestInvestigation(nextInvestigation, startedAt, finishedAt);
@@ -571,13 +690,15 @@ export default function App() {
   function showSampleInvestigation() {
     setError(null);
     setExportStatus(null);
+    setHistoryStatus(null);
+    setComparisonInvestigation(null);
     const nextInvestigation = buildSampleInvestigation(outputLanguage);
     setInvestigation(nextInvestigation);
     const now = Date.now();
     setAnalysisStartedAt(now);
     setAnalysisFinishedAt(now);
     setAnalysisProgress(100);
-    rememberInvestigation(nextInvestigation);
+    rememberInvestigation(nextInvestigation, now, now);
     rememberLatestInvestigation(nextInvestigation, now, now);
   }
 
@@ -650,23 +771,31 @@ export default function App() {
               历史记录
             </button>
             {activeMenu === "history" ? (
-              <div className="nav-popover history-popover">
+              <div className="nav-popover history-popover" style={ { width: "360px", maxHeight: "70vh", overflowY: "auto" } }>
                 <strong>最近分析</strong>
+                {historyStatus ? <span>{historyStatus}</span> : null}
                 {history.length === 0 ? <span>暂无历史记录</span> : null}
                 {history.map((entry) => (
-                  <button key={entry.id} type="button" onClick={() => setActiveMenu(null)}>
-                    {entry.assetName} · {entry.candidateCount} 个候选
-                  </button>
+                  <div key={entry.id} style={ { display: "grid", gap: "6px", borderTop: "1px solid var(--border)", paddingTop: "8px" } }>
+                    <span>
+                      {entry.assetName} · {entry.candidateCount} 个候选 · {formatHistoryDate(entry.createdAt)}
+                    </span>
+                    <div style={ { display: "flex", flexWrap: "wrap", gap: "6px" } }>
+                      <button type="button" onClick={() => restoreHistoryItem(entry)}>
+                        打开
+                      </button>
+                      <button type="button" onClick={() => compareHistoryItem(entry)}>
+                        对比当前
+                      </button>
+                      <button type="button" onClick={() => deleteHistoryItem(entry.id)}>
+                        删除
+                      </button>
+                    </div>
+                  </div>
                 ))}
                 {history.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      localStorage.removeItem(historyStorageKey);
-                      setHistory([]);
-                    }}
-                  >
-                    清空历史
+                  <button type="button" onClick={clearHistory}>
+                    清空全部历史
                   </button>
                 ) : null}
               </div>
@@ -775,11 +904,42 @@ export default function App() {
               <button className="small-button" type="button" onClick={handleCopyReport}>
                 复制报告
               </button>
+              {comparisonInvestigation ? (
+                <button className="small-button" type="button" onClick={() => setComparisonInvestigation(null)}>
+                  关闭对比
+                </button>
+              ) : null}
               {exportStatus ? (
                 <span className="save-status" role="status">
                   {exportStatus}
                 </span>
               ) : null}
+            </section>
+          ) : null}
+          {investigation && comparisonInvestigation ? (
+            <section className="panel" aria-label="历史调查对比" style={ { display: "grid", gap: "8px", marginBottom: "10px" } }>
+              <div className="card-title-row">
+                <h3>历史调查对比</h3>
+                <button className="small-button" type="button" onClick={() => setComparisonInvestigation(null)}>
+                  关闭
+                </button>
+              </div>
+              <div style={ { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" } }>
+                <div className="scope-mode-note">
+                  <strong>当前调查</strong>
+                  <br />
+                  {getAssetName(investigation)} · {investigation.candidates.length} 个候选
+                  <br />
+                  第一候选：{bestCandidateName(investigation)} · 匹配 {bestCandidateScore(investigation)}
+                </div>
+                <div className="scope-mode-note">
+                  <strong>历史记录</strong>
+                  <br />
+                  {getAssetName(comparisonInvestigation)} · {comparisonInvestigation.candidates.length} 个候选
+                  <br />
+                  第一候选：{bestCandidateName(comparisonInvestigation)} · 匹配 {bestCandidateScore(comparisonInvestigation)}
+                </div>
+              </div>
             </section>
           ) : null}
           <CandidateResults
