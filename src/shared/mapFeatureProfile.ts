@@ -33,7 +33,7 @@ function mediaSourceLabel(value: string) {
 }
 
 function hasMapVerifiableWord(value: string) {
-  return /(building|roof|wall|fence|flower|bed|pole|utility|platform|station|road|track|rail|yard|tower|field|ground|tree|water|river|mountain|shadow|building|屋顶|围墙|墙|花坛|电线杆|站台|道路|轨道|铁路|建筑|操场|塔|水体|河|山|阴影)/i.test(
+  return /(building|roof|wall|fence|gate|flower|bed|pole|utility|platform|station|road|track|rail|yard|tower|field|ground|tree|water|river|mountain|shadow|bridge|intersection|runway|hangar|warehouse|parking|courtyard|harbor|port|coast|shore|canal|chimney|smokestack|stadium|sports|solar|greenhouse|slope|ridge|valley|屋顶|围墙|墙|门岗|大门|花坛|电线杆|灯杆|站台|道路|路口|轨道|铁路|建筑|操场|训练场|停车场|仓库|塔|烟囱|桥|机场|跑道|机库|港口|码头|海岸|河道|水体|河|山|山坡|山脊|树林|农田|阴影|朝向)/i.test(
     value
   );
 }
@@ -48,7 +48,7 @@ function isSourceOnly(value: string) {
 }
 
 function isViewpoint(value: string) {
-  return /(camera|view|looking|foreground|background|north|south|east|west|angle|shadow|视角|镜头|前景|后方|北|南|东|西|阴影|朝向)/i.test(
+  return /(camera|view|looking|foreground|background|north|south|east|west|angle|shadow|left|right|front|behind|near|far|parallel|perpendicular|视角|镜头|前景|后方|左|右|前|后|远|近|北|南|东|西|阴影|朝向|平行|垂直)/i.test(
     value
   );
 }
@@ -58,7 +58,10 @@ function buildInstruction(profile: Omit<MapFeatureProfile, "searchInstruction">)
     profile.primaryFeatures.length ? `Primary map checks: ${profile.primaryFeatures.join("; ")}` : "",
     profile.spatialRelationships.length ? `Spatial checks: ${profile.spatialRelationships.join("; ")}` : "",
     profile.viewpointConstraints.length ? `Viewpoint checks: ${profile.viewpointConstraints.join("; ")}` : "",
-    profile.auxiliaryTextClues.length ? `Auxiliary text only: ${profile.auxiliaryTextClues.join("; ")}` : ""
+    profile.auxiliaryTextClues.length ? `Auxiliary text only: ${profile.auxiliaryTextClues.join("; ")}` : "",
+    profile.excludedSourceOnlyClues.length
+      ? `Do not use as primary location proof: ${profile.excludedSourceOnlyClues.join("; ")}`
+      : ""
   ].filter(Boolean);
 
   return parts.join(". ");
@@ -80,16 +83,16 @@ export function buildMapFeatureProfile(scope: UserScope, clues: ExtractedClues):
       return label ? [label] : [];
     })
   );
-  const primaryFeatures = unique(clues.sceneFeatures.filter((feature) => !isSourceOnly(feature)).slice(0, 12));
+  const primaryFeatures = unique(clues.sceneFeatures.filter((feature) => !isSourceOnly(feature)).slice(0, 14));
   const spatialRelationships = unique(
-    clues.spatialRelationships.filter((relationship) => !isSourceOnly(relationship)).slice(0, 10)
+    clues.spatialRelationships.filter((relationship) => !isSourceOnly(relationship)).slice(0, 12)
   );
-  const viewpointConstraints = unique(spatialRelationships.filter(isViewpoint).slice(0, 6));
+  const viewpointConstraints = unique(spatialRelationships.filter(isViewpoint).slice(0, 8));
   const auxiliaryTextClues = unique(
     [...clues.ocrText, ...clues.visibleLabels]
       .filter((clue) => !isSourceOnly(clue))
       .filter((clue) => !mediaSourceLabel(clue))
-      .slice(0, 8)
+      .slice(0, 10)
   );
 
   const profile = {
