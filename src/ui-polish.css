@@ -1,0 +1,479 @@
+/* =====================================================================
+   GeoGuess — OSINT UI polish layer
+   ---------------------------------------------------------------------
+   Loaded after the base stylesheet and dark theme. This file focuses on
+   visual hierarchy, interaction states, density, and readability without
+   changing application logic.
+   ===================================================================== */
+
+:root {
+  --geo-bg-0: #070b13;
+  --geo-bg-1: #0a1020;
+  --geo-panel: rgba(17, 27, 45, 0.92);
+  --geo-panel-strong: rgba(20, 32, 52, 0.96);
+  --geo-border: rgba(125, 211, 252, 0.15);
+  --geo-border-strong: rgba(94, 234, 212, 0.32);
+  --geo-text: #e8f1ff;
+  --geo-muted: #90a3bf;
+  --geo-cyan: #22d3ee;
+  --geo-teal: #2dd4bf;
+  --geo-blue: #60a5fa;
+  --geo-amber: #fbbf24;
+  --geo-red: #fb7185;
+  --geo-glow: 0 0 0 1px rgba(45, 212, 191, 0.14), 0 18px 52px rgba(0, 0, 0, 0.45);
+}
+
+body {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(14, 165, 233, 0.16), transparent 32rem),
+    radial-gradient(circle at 85% 8%, rgba(45, 212, 191, 0.12), transparent 30rem),
+    linear-gradient(180deg, var(--geo-bg-1), var(--geo-bg-0));
+}
+
+.app-shell {
+  background:
+    linear-gradient(rgba(96, 165, 250, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96, 165, 250, 0.025) 1px, transparent 1px),
+    transparent;
+  background-size: 32px 32px;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.18);
+  backdrop-filter: blur(18px);
+}
+
+.brand-lockup h1 {
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 18px rgba(125, 211, 252, 0.28);
+}
+
+.brand-mark {
+  border-color: rgba(125, 211, 252, 0.86);
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.26);
+}
+
+.header-nav-item,
+.user-chip,
+button,
+a {
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    opacity 160ms ease;
+}
+
+button:hover,
+a:hover {
+  transform: translateY(-1px);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(45, 212, 191, 0.72);
+  outline-offset: 2px;
+}
+
+.panel,
+.analysis-action-panel,
+.status-pill,
+.best-candidate-card,
+.distribution-card,
+.field-checklist,
+.evidence-card,
+.candidate,
+.candidate-table-wrap,
+.trace-strip,
+.map-preview,
+.earth-screenshot-slot,
+.earth-preview,
+.report-export-bar {
+  border-color: var(--geo-border) !important;
+  background: linear-gradient(180deg, rgba(20, 32, 52, 0.94), rgba(12, 19, 34, 0.92)) !important;
+  box-shadow: var(--geo-glow);
+  backdrop-filter: blur(14px);
+}
+
+.report-export-bar {
+  position: sticky;
+  top: 62px;
+  z-index: 35;
+  border: 1px solid var(--geo-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.report-export-bar::before {
+  content: "报告操作";
+  margin-right: 6px;
+  color: var(--geo-muted);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.workbench-status-bar {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.status-pill {
+  background:
+    linear-gradient(180deg, rgba(19, 31, 51, 0.96), rgba(13, 21, 36, 0.94)) !important;
+}
+
+.status-pill.ready {
+  box-shadow: inset 0 0 0 1px rgba(45, 212, 191, 0.12);
+}
+
+.status-pill::before {
+  background: rgba(13, 21, 36, 0.86);
+  box-shadow: 0 0 16px rgba(96, 165, 250, 0.28);
+}
+
+.status-pill.ready::before {
+  border-color: var(--geo-teal);
+  color: var(--geo-teal);
+  box-shadow: 0 0 18px rgba(45, 212, 191, 0.3);
+}
+
+.status-progress,
+.analysis-progress,
+.score-meter {
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
+}
+
+.status-progress span,
+.analysis-progress span,
+.score-meter span {
+  background: linear-gradient(90deg, var(--geo-blue), var(--geo-teal), var(--geo-cyan)) !important;
+  box-shadow: 0 0 14px rgba(45, 212, 191, 0.34);
+}
+
+.primary-button {
+  border: 1px solid rgba(45, 212, 191, 0.28);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #22d3ee, #2dd4bf) !important;
+  box-shadow: 0 14px 34px rgba(45, 212, 191, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+}
+
+.primary-button:hover:not(:disabled) {
+  box-shadow: 0 18px 42px rgba(45, 212, 191, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+}
+
+.secondary-button,
+.small-button,
+.inline-action,
+.icon-button,
+.trace-query-card button,
+.trace-query-card a,
+.nav-popover button {
+  border-radius: 9px !important;
+  border-color: rgba(125, 211, 252, 0.2) !important;
+  background: rgba(15, 23, 42, 0.74) !important;
+  color: #a5f3fc !important;
+  text-decoration: none;
+}
+
+.secondary-button:hover,
+.small-button:hover,
+.inline-action:hover,
+.icon-button:hover,
+.trace-query-card button:hover,
+.trace-query-card a:hover,
+.nav-popover button:hover {
+  border-color: rgba(45, 212, 191, 0.48) !important;
+  background: rgba(20, 184, 166, 0.12) !important;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.08);
+}
+
+.upload-dropzone {
+  border-radius: 12px;
+  border-color: rgba(125, 211, 252, 0.24) !important;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(45, 212, 191, 0.12), transparent 70%),
+    rgba(14, 22, 38, 0.88) !important;
+}
+
+.upload-dropzone:hover {
+  border-color: rgba(45, 212, 191, 0.52) !important;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.08);
+}
+
+.field input,
+.field select,
+.field textarea {
+  border-radius: 9px !important;
+}
+
+.section-heading,
+.config-heading,
+.result-toolbar,
+.map-preview-header,
+.earth-screenshot-header {
+  border-bottom-color: rgba(125, 211, 252, 0.13) !important;
+}
+
+.card-title-row h3,
+.analysis-card-heading h3,
+.candidate-workbench h3,
+.map-verification-section h3,
+.trace-strip-heading h3 {
+  letter-spacing: 0.01em;
+}
+
+.hero-coordinate,
+.coordinate {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 16px rgba(45, 212, 191, 0.24);
+}
+
+.best-candidate-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.best-candidate-card::after {
+  position: absolute;
+  inset: auto -20% -55% auto;
+  width: 220px;
+  height: 220px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.16), transparent 64%);
+  content: "";
+  pointer-events: none;
+}
+
+.candidate-metrics {
+  border-color: rgba(125, 211, 252, 0.12) !important;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.candidate-metrics div {
+  border-color: rgba(125, 211, 252, 0.1) !important;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.candidate-distribution-map,
+.map-placeholder,
+.map-link-card,
+.earth-placeholder {
+  border-radius: 10px;
+  background:
+    linear-gradient(rgba(34, 211, 238, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.055) 1px, transparent 1px),
+    #09111f !important;
+  background-size: 28px 28px;
+}
+
+.distribution-map-tiles img {
+  filter: saturate(0.75) contrast(0.95) brightness(0.72) hue-rotate(170deg);
+  opacity: 0.62;
+}
+
+.candidate-map-marker {
+  border-color: rgba(236, 253, 245, 0.94);
+  background: linear-gradient(135deg, #0f766e, #22d3ee);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.42), 0 0 0 4px rgba(45, 212, 191, 0.16);
+}
+
+.candidate-map-marker.selected {
+  background: linear-gradient(135deg, #2563eb, #22d3ee);
+  box-shadow: 0 0 0 5px rgba(34, 211, 238, 0.22), 0 16px 36px rgba(0, 0, 0, 0.48);
+}
+
+.field-checklist li,
+.earth-checklist li,
+.analysis-log li {
+  line-height: 1.45;
+}
+
+.trace-chip-row span,
+.trace-strip-grid em,
+.trace-query-row code {
+  border-radius: 999px !important;
+  border-color: rgba(125, 211, 252, 0.16) !important;
+  background: rgba(15, 23, 42, 0.7) !important;
+}
+
+.feature-row span {
+  border-color: rgba(45, 212, 191, 0.26) !important;
+  background: rgba(20, 184, 166, 0.13) !important;
+}
+
+.candidate-table-wrap {
+  border-radius: 12px;
+}
+
+.candidate-comparison-table thead th {
+  background: rgba(10, 18, 32, 0.96) !important;
+  color: #b6c7df !important;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.candidate-comparison-table tbody tr {
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.candidate-comparison-table tbody tr:hover {
+  background: rgba(34, 211, 238, 0.08) !important;
+}
+
+.candidate-comparison-table tbody tr.selected-candidate-row {
+  background: rgba(20, 184, 166, 0.13) !important;
+  box-shadow: inset 4px 0 0 var(--geo-teal), inset 0 0 0 1px rgba(45, 212, 191, 0.16) !important;
+}
+
+.review-status,
+.consistency-badge,
+.candidate-badges > span,
+.workbench-count {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.review-status-confirmed,
+.consistency-good {
+  border-color: rgba(45, 212, 191, 0.25);
+}
+
+.review-status-excluded,
+.consistency-bad {
+  border-color: rgba(251, 113, 133, 0.25);
+}
+
+.review-status-keep,
+.consistency-warn,
+.threshold-review-note {
+  border-color: rgba(251, 191, 36, 0.28) !important;
+}
+
+.osint-link-grid a {
+  border-radius: 10px;
+}
+
+.osint-link-grid a:hover {
+  border-color: rgba(45, 212, 191, 0.36) !important;
+  background: rgba(20, 184, 166, 0.1) !important;
+}
+
+.evidence-drawer,
+.report {
+  border: 1px solid var(--geo-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(12, 19, 34, 0.72);
+}
+
+.evidence-drawer summary,
+.report summary,
+.candidate details summary {
+  cursor: pointer;
+  color: #a5f3fc;
+  font-weight: 900;
+}
+
+.report pre {
+  border: 1px solid rgba(125, 211, 252, 0.12);
+  border-radius: 10px;
+}
+
+.nav-popover,
+.settings-popover .config-panel {
+  border-radius: 12px !important;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.62);
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(15, 23, 42, 0.62);
+  border-radius: 999px;
+  background: rgba(94, 234, 212, 0.32);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(94, 234, 212, 0.54);
+}
+
+@media (min-width: 1100px) {
+  .result-panel {
+    border-radius: 14px;
+  }
+
+  .summary-board,
+  .primary-verification-grid,
+  .candidate-workbench {
+    gap: 10px;
+  }
+
+  .candidate-comparison-table th,
+  .candidate-comparison-table td {
+    border-bottom-color: rgba(125, 211, 252, 0.1) !important;
+  }
+}
+
+@media (max-width: 1099px) {
+  .report-export-bar {
+    position: static;
+    border-radius: 10px;
+  }
+
+  .report-export-bar::before {
+    flex-basis: 100%;
+  }
+
+  .panel,
+  .analysis-action-panel,
+  .best-candidate-card,
+  .distribution-card,
+  .field-checklist,
+  .evidence-card,
+  .candidate,
+  .candidate-table-wrap,
+  .trace-strip,
+  .map-preview,
+  .earth-screenshot-slot,
+  .earth-preview {
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header {
+    backdrop-filter: blur(14px);
+  }
+
+  .report-export-bar {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-export-bar .save-status {
+    grid-column: 1 / -1;
+  }
+
+  .secondary-button,
+  .small-button {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+}
