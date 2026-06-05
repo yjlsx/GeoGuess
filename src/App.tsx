@@ -144,7 +144,7 @@ function WorkbenchStatus({
         <strong>{analysisStatus}</strong>
         {loading || hasInvestigation ? (
           <div className="status-progress" aria-hidden="true">
-            <span style={{ width: `${hasInvestigation ? 100 : clampedProgress}%` }} />
+            <span style={ { width: `${hasInvestigation ? 100 : clampedProgress}%` } } />
           </div>
         ) : null}
       </div>
@@ -762,11 +762,7 @@ export default function App() {
             now={clockNow}
           />
           {investigation ? (
-            <section
-              className="report-export-bar"
-              aria-label="报告导出与分享"
-              style= display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", margin: "12px 0" 
-            >
+            <section className="report-export-bar" aria-label="报告导出与分享" style={ { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", margin: "12px 0" } }>
               <button className="secondary-button" type="button" onClick={handlePrintReport}>
                 打印 / 导出 PDF
               </button>
