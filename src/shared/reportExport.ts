@@ -93,7 +93,7 @@ function reportMarkdown(investigation: Investigation): string {
   if (summary) {
     return summary;
   }
-  return "价本次调查暂无可导出的报告内容。";
+  return "本次调查暂无可导出的报告内容。";
 }
 
 export function reportTitle(investigation: Investigation): string {
