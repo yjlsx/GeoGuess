@@ -581,8 +581,7 @@ export default function App() {
       <header className="app-header">
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true" />
-          <h1>GeoVerify OSINT</h1>
-          <p>地理位置验证工作台</p>
+          <h1>GeoGuess</h1>
         </div>
         <nav className="header-nav" aria-label="工作台导航">
           <div className="settings-menu">
