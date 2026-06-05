@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runInvestigation } from "../../server/investigationService";
 import type { Candidate, ExtractedClues, SearchQuery } from "../../src/shared/types";
 
 describe("runInvestigation", () => {
-  it("runs the manual/mock path and returns a report", async () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("does not return the sample coordinate from the default offline search path", async () => {
     const result = await runInvestigation({
       image: {
         originalPath: "local://sample",
@@ -27,16 +31,12 @@ describe("runInvestigation", () => {
     });
 
     expect(result.searchQueries.length).toBeGreaterThan(0);
-    expect(result.candidates[0].latitude).toBe(42.25967);
-    expect(result.candidates[0].confidence).toBe("low");
-    expect(result.candidates[0].uncertainty).toContain("当前为离线模拟候选，不代表真实定位结论");
-    expect(result.candidates[0].sources[0].title).toBe("离线模拟搜索");
-    expect(result.candidates[0].mapPreview.googleMapsEmbedUrl).toContain("maps.google.com/maps");
-    expect(result.candidates[0].mapPreview.googleEarthWebUrl).toContain("earth.google.com");
+    expect(result.candidates).toEqual([]);
     expect(result.searchProcess.length).toBeGreaterThan(0);
     expect(result.imageAnalysis.observations.length).toBeGreaterThan(0);
     expect(result.seasonalAnalysis.inferredSeason).toBeDefined();
-    expect(result.report.summaryMarkdown).toContain("低置信");
+    expect(result.report.summaryMarkdown).toContain("尚未生成候选坐标");
+    expect(result.report.fullMarkdown).toContain("尚未生成候选坐标");
     expect(result.report.summaryMarkdown).not.toContain("Low confidence");
   });
 
@@ -72,7 +72,9 @@ describe("runInvestigation", () => {
     };
     const seen = {
       imagePath: "",
-      queries: [] as SearchQuery[]
+      queries: [] as SearchQuery[],
+      metadataPaths: [] as string[],
+      mapFeatureProfile: undefined as Awaited<ReturnType<typeof runInvestigation>>["mapFeatureProfile"] | undefined
     };
     const customCandidate: Candidate = {
       id: "custom-candidate",
@@ -121,9 +123,16 @@ describe("runInvestigation", () => {
             return request.manualClues ?? manualClues;
           }
         },
+        metadata: {
+          async extractMetadata(request) {
+            seen.metadataPaths = request.mediaPaths;
+            return [];
+          }
+        },
         search: {
           async findCandidates(args) {
             seen.queries = args.queries;
+            seen.mapFeatureProfile = args.mapFeatureProfile;
             return [customCandidate];
           }
         }
@@ -132,9 +141,193 @@ describe("runInvestigation", () => {
 
     expect(result.id).toBe("stored-investigation-id");
     expect(seen.imagePath).toBe("local://cropped-image");
+    expect(seen.metadataPaths).toEqual(["local://original-image"]);
     expect(seen.queries.length).toBeGreaterThan(0);
     expect(seen.queries.map((query) => query.query).join("\n")).toContain("custom depot");
-    expect(result.candidates).toEqual([customCandidate]);
+    expect(seen.mapFeatureProfile?.primaryFeatures).toContain("rail siding");
+    expect(seen.mapFeatureProfile?.spatialRelationships).toContain("road north of tracks");
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]).toMatchObject(customCandidate);
+    expect(result.candidates[0].osintLinks?.map((link) => link.title)).toContain("OpenRailwayMap nearby");
+    expect(result.candidates[0].osintLinks?.map((link) => link.title)).toContain("Mapillary street-level imagery");
+    expect(result.mapFeatureProfile.primaryFeatures).toContain("rail siding");
     expect(result.report.fullMarkdown).toContain("搜索过程");
+    expect(result.report.fullMarkdown).toContain("地图核验特征集合");
+  });
+
+  it("turns EXIF GPS metadata into a direct high-confidence coordinate candidate", async () => {
+    const result = await runInvestigation({
+      id: "metadata-investigation-id",
+      image: {
+        originalPath: "local://original-a",
+        sourcePaths: ["local://original-a", "local://original-b"],
+        cropMode: "full",
+        evidencePaths: ["local://crop-a"]
+      },
+      userScope: {
+        country: "Japan"
+      },
+      providers: {
+        vision: {
+          async extractClues() {
+            return {
+              ocrText: [],
+              visibleLabels: [],
+              languages: [],
+              sceneFeatures: ["rail platform"],
+              spatialRelationships: [],
+              inferredSearchTerms: []
+            };
+          }
+        },
+        metadata: {
+          async extractMetadata(request) {
+            expect(request.mediaPaths).toEqual(["local://original-a", "local://original-b"]);
+            return [
+              {
+                sourcePath: "local://original-a",
+                gps: {
+                  latitude: 35.6895,
+                  longitude: 139.6917
+                },
+                capturedAt: "2026-05-31T10:20:30",
+                camera: "ExampleCam Geo 1",
+                evidenceType: "exif",
+                notes: ["EXIF GPS coordinates found in the original media file."]
+              }
+            ];
+          }
+        },
+        search: {
+          async findCandidates() {
+            return [];
+          }
+        }
+      }
+    });
+
+    expect(result.metadataEvidence).toHaveLength(1);
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]).toMatchObject({
+      id: "metadata-candidate-1",
+      name: "EXIF GPS metadata",
+      latitude: 35.6895,
+      longitude: 139.6917,
+      confidence: "high",
+      matchScore: 100,
+      matchedFeatures: ["EXIF GPS coordinates found in original media"]
+    });
+    expect(result.candidates[0].osintLinks?.map((link) => link.title)).toContain("OpenStreetMap nearby");
+    expect(result.candidates[0].osintLinks?.map((link) => link.title)).toContain("SunCalc shadow check");
+    expect(result.report.summaryMarkdown).toContain("35.68950, 139.69170");
+    expect(result.report.fullMarkdown).toContain("EXIF / 元数据");
+    expect(result.report.fullMarkdown).toContain("ExampleCam Geo 1");
+  });
+
+  it("merges visual clues from multiple evidence paths before searching", async () => {
+    const seen = {
+      imagePaths: [] as string[],
+      searchedFeatures: [] as string[]
+    };
+
+    await runInvestigation({
+      image: {
+        originalPath: "local://frame-a",
+        cropMode: "full",
+        evidencePaths: ["local://frame-a", "local://frame-b"]
+      },
+      userScope: {
+        country: "China"
+      },
+      providers: {
+        vision: {
+          async extractClues(request) {
+            seen.imagePaths.push(request.imagePath);
+            return {
+              ocrText: [],
+              visibleLabels: [],
+              languages: [],
+              sceneFeatures: request.imagePath.endsWith("frame-a") ? ["red wall"] : ["blue roof"],
+              spatialRelationships: request.imagePath.endsWith("frame-a") ? ["platform left of building"] : ["poles beside road"],
+              inferredSearchTerms: []
+            };
+          }
+        },
+        search: {
+          async findCandidates(args) {
+            seen.searchedFeatures = args.clues.sceneFeatures;
+            return [];
+          }
+        }
+      }
+    });
+
+    expect(seen.imagePaths).toEqual(["local://frame-a", "local://frame-b"]);
+    expect(seen.searchedFeatures).toEqual(["red wall", "blue roof"]);
+  });
+
+  it("uses the default OpenAI-backed search provider when vision config is supplied", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        output_text: JSON.stringify({
+          candidates: [
+            {
+              name: "OpenAI searched candidate",
+              latitude: 1.23,
+              longitude: 4.56,
+              confidence: "medium",
+              matchScore: 64,
+              matchedFeatures: ["rail platform"],
+              missingOrUnverifiedFeatures: ["road alignment unclear"],
+              viewpointNotes: ["Needs satellite angle check"],
+              matchingEvidence: ["web search candidate"],
+              uncertainty: ["test"],
+              sources: [
+                {
+                  title: "OpenAI source",
+                  url: "https://example.test/openai-candidate",
+                  note: "Search result source"
+                }
+              ],
+              earthVerificationChecklist: ["verify"]
+            }
+          ]
+        })
+      })
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await runInvestigation({
+      image: {
+        originalPath: "local://image",
+        cropMode: "full"
+      },
+      userScope: {
+        country: "Japan"
+      },
+      visionConfig: {
+        apiKey: "test-api-key",
+        model: "gpt-4o"
+      },
+      providers: {
+        vision: {
+          async extractClues() {
+            return {
+              ocrText: ["JR"],
+              visibleLabels: [],
+              languages: [],
+              sceneFeatures: ["rail platform"],
+              spatialRelationships: [],
+              inferredSearchTerms: ["Tokyo rail platform"]
+            };
+          }
+        }
+      }
+    });
+
+    expect(fetchMock).toHaveBeenCalled();
+    expect(result.candidates[0].name).toBe("OpenAI searched candidate");
+    expect(result.report.summaryMarkdown).toContain("1.23000, 4.56000");
   });
 });

@@ -15,7 +15,8 @@ describe("buildReports", () => {
 
   it("creates a full report with queries, sources, and Google Earth checklist", () => {
     const report = buildReports(sampleInvestigationInput);
-    expect(report.fullMarkdown).toContain("# 图片定位报告");
+    expect(report.fullMarkdown).toContain("# 图片定位候选报告");
+    expect(report.fullMarkdown).toContain("不要把候选坐标视为已确认地理位置");
     expect(report.fullMarkdown).toContain("## 提取到的线索");
     expect(report.fullMarkdown).toContain("## 搜索过程");
     expect(report.fullMarkdown).toContain("## 季节与历史影像核验");
@@ -56,9 +57,32 @@ describe("buildReports", () => {
       outputLanguage: "en-US"
     });
 
-    expect(report.fullMarkdown).toContain("# Image Geolocation Evidence Report");
+    expect(report.fullMarkdown).toContain("# Image Geolocation Candidate Report");
+    expect(report.fullMarkdown).toContain("Do not treat coordinates as confirmed");
     expect(report.fullMarkdown).toContain("## Search Process");
     expect(report.fullMarkdown).toContain("## Season and Historical Imagery Check");
     expect(report.summaryMarkdown).toContain("High confidence");
+  });
+
+  it("includes external OSINT verification links when candidates provide them", () => {
+    const report = buildReports({
+      ...sampleInvestigationInput,
+      candidates: [
+        {
+          ...sampleInvestigationInput.candidates[0],
+          osintLinks: [
+            {
+              title: "OpenRailwayMap nearby",
+              url: "https://www.openrailwaymap.org/?style=standard&lat=42.25967&lon=112.75623&zoom=16",
+              note: "Check railway infrastructure."
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(report.fullMarkdown).toContain("外部 OSINT 核验入口");
+    expect(report.fullMarkdown).toContain("OpenRailwayMap nearby");
+    expect(report.fullMarkdown).toContain("https://www.openrailwaymap.org/");
   });
 });

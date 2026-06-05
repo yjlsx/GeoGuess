@@ -1,6 +1,7 @@
 .superpowers/
 .data/
 dist/
+tmp-test-output/
 node_modules/
 .env
 .env.*

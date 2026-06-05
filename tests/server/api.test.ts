@@ -61,10 +61,38 @@ async function imageBuffer() {
 describe("local investigation API", () => {
   beforeEach(() => {
     runInvestigationMock.mockClear();
+    vi.unstubAllGlobals();
   });
 
   it("can be imported without listening and serves health checks", async () => {
     await request(app).get("/api/health").expect(200, { ok: true });
+  });
+
+  it("fetches available models from an OpenAI-compatible base URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [{ id: "gpt-4o" }, { id: "geo-vision-v2" }, { id: "" }]
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await request(app)
+      .post("/api/models")
+      .send({ apiKey: "test-api-key", baseUrl: "https://proxy.example/v1/" })
+      .expect(200);
+
+    expect(fetchMock).toHaveBeenCalledWith("https://proxy.example/v1/models", {
+      headers: {
+        Authorization: "Bearer test-api-key",
+        "Content-Type": "application/json"
+      }
+    });
+    expect(response.body.models).toEqual(["geo-vision-v2", "gpt-4o"]);
+  });
+
+  it("returns 400 when model listing is requested without an API key", async () => {
+    await request(app).post("/api/models").send({ baseUrl: "https://proxy.example/v1" }).expect(400);
   });
 
   it("returns 400 when the image upload is missing", async () => {
@@ -128,6 +156,58 @@ describe("local investigation API", () => {
 
     expect(response.body.outputLanguage).toBe("en-US");
     expect(runInvestigationMock).toHaveBeenCalledWith(expect.objectContaining({ outputLanguage: "en-US" }));
+  });
+
+  it("passes multiple uploaded images as evidence paths to investigations", async () => {
+    const response = await request(app)
+      .post("/api/investigations")
+      .attach("assets", await imageBuffer(), "scene-a.jpg")
+      .attach("assets", await imageBuffer(), "scene-b.jpg")
+      .expect(200);
+
+    expect(response.body.image.evidencePaths).toHaveLength(2);
+    expect(runInvestigationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image: expect.objectContaining({
+          originalPath: expect.stringMatching(/scene-a\.jpg$/),
+          sourcePaths: [expect.stringMatching(/scene-a\.jpg$/), expect.stringMatching(/scene-b\.jpg$/)],
+          evidencePaths: [expect.stringMatching(/scene-a\.jpg$/), expect.stringMatching(/scene-b\.jpg$/)]
+        })
+      })
+    );
+  });
+
+  it("passes per-request vision model configuration to investigations", async () => {
+    await request(app)
+      .post("/api/investigations")
+      .attach("image", await imageBuffer(), "scene.jpg")
+      .field("visionConfig", JSON.stringify({
+        apiKey: "test-api-key",
+        baseUrl: "https://proxy.example/v1",
+        model: "vision-model"
+      }))
+      .expect(200);
+
+    expect(runInvestigationMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        visionConfig: {
+          apiKey: "test-api-key",
+          baseUrl: "https://proxy.example/v1",
+          model: "vision-model"
+        }
+      })
+    );
+  });
+
+  it("returns 400 for malformed visionConfig JSON", async () => {
+    const response = await request(app)
+      .post("/api/investigations")
+      .attach("image", await imageBuffer(), "scene.jpg")
+      .field("visionConfig", "{bad-json")
+      .expect(400);
+
+    expect(response.body.error).toMatch(/visionConfig/i);
+    expect(runInvestigationMock).not.toHaveBeenCalled();
   });
 
   it("returns 413 when the upload exceeds the configured file size limit", async () => {

@@ -20,16 +20,15 @@ const clues: ExtractedClues = {
 };
 
 describe("buildSearchQueries", () => {
-  it("combines scope, source, OCR, and facility clues", () => {
+  it("prioritizes visual feature bundles over source-only OCR clues", () => {
     const queries = buildSearchQueries(scope, clues);
     expect(queries[0]).toEqual({
-      query: "Mongolia Dornogovi railway station CCTV 7 China Mongolia joint training",
+      query:
+        "Mongolia Dornogovi railway station railway station building grassland railway runs horizontally in foreground station building behind tracks",
       language: "en",
-      purpose: "scope-source-facility"
+      purpose: "visual-feature-bundle"
     });
-    expect(queries.map((item) => item.query)).toContain(
-      "中蒙 草原伙伴 2026 陆军联合训练 Mongolia railway station"
-    );
+    expect(queries.map((item) => item.query)).not.toContain("CCTV 7 Mongolia railway station");
   });
 
   it("deduplicates repeated queries", () => {
@@ -58,9 +57,9 @@ describe("buildSearchQueries", () => {
     const unique = new Set(queries.map((item) => item.query.trim().replace(/\s+/g, " ").toLocaleLowerCase()));
     expect(unique.size).toBe(queries.length);
     expect(queries[0]).toEqual({
-      query: "Railway   Station",
+      query: "Railway Station",
       language: "en",
-      purpose: "scope-source-facility"
+      purpose: "visual-feature-bundle"
     });
   });
 
@@ -75,6 +74,9 @@ describe("buildSearchQueries", () => {
         inferredSearchTerms: []
       }
     );
-    expect(queries[0].query).toBe("Mongolia Station Building");
+    expect(queries[0].query).toBe(
+      "Mongolia Station Building railway runs horizontally in foreground station building behind tracks"
+    );
+    expect(queries[0].purpose).toBe("visual-feature-bundle");
   });
 });

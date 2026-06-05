@@ -10,13 +10,26 @@ export type CoordinateBox = {
 };
 
 export type UserScope = {
+  regionScope?: "custom" | "global" | "country";
+  boundaryMode?: "rectangle" | "polygon";
   country?: string;
   region?: string;
   coordinateBox?: CoordinateBox;
+  polygonCoordinates?: string;
   facilityType?: string;
   source?: string;
   dateOrTimeHint?: string;
   notes?: string;
+};
+
+export type VisionModelConfig = {
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  matchingThreshold?: number;
+  maxCandidates?: number;
+  coordinateSystem?: "WGS84 (EPSG:4326)" | "GCJ-02" | "BD-09";
+  terrainValidation?: boolean;
 };
 
 export type ExtractedClues = {
@@ -34,6 +47,27 @@ export type SearchQuery = {
   purpose: string;
 };
 
+export type MapFeatureProfile = {
+  primaryFeatures: string[];
+  spatialRelationships: string[];
+  viewpointConstraints: string[];
+  auxiliaryTextClues: string[];
+  excludedSourceOnlyClues: string[];
+  searchInstruction: string;
+};
+
+export type MetadataEvidence = {
+  sourcePath: string;
+  gps?: {
+    latitude: number;
+    longitude: number;
+  };
+  capturedAt?: string;
+  camera?: string;
+  evidenceType: "exif";
+  notes: string[];
+};
+
 export type SearchProcessStep = {
   title: string;
   query?: string;
@@ -47,12 +81,22 @@ export type SourceEvidence = {
   note: string;
 };
 
+export type OsintLink = {
+  title: string;
+  url: string;
+  note: string;
+};
+
 export type Candidate = {
   id: string;
   name?: string;
   latitude: number;
   longitude: number;
   confidence: Confidence;
+  matchScore?: number;
+  matchedFeatures?: string[];
+  missingOrUnverifiedFeatures?: string[];
+  viewpointNotes?: string[];
   mapLinks: {
     googleMaps: string;
     googleEarthHint?: string;
@@ -66,6 +110,7 @@ export type Candidate = {
   matchingEvidence: string[];
   uncertainty: string[];
   sources: SourceEvidence[];
+  osintLinks?: OsintLink[];
   earthVerificationChecklist: string[];
 };
 
@@ -87,6 +132,8 @@ export type ReportInput = {
   outputLanguage?: OutputLanguage;
   userScope: UserScope;
   extractedClues: ExtractedClues;
+  mapFeatureProfile?: MapFeatureProfile;
+  metadataEvidence?: MetadataEvidence[];
   searchQueries: SearchQuery[];
   searchProcess?: SearchProcessStep[];
   imageAnalysis?: ImageAnalysis;
@@ -101,9 +148,13 @@ export type Investigation = {
     originalPath: string;
     cropPath?: string;
     cropMode: CropMode;
+    sourcePaths?: string[];
+    evidencePaths?: string[];
   };
   userScope: UserScope;
   extractedClues: ExtractedClues;
+  mapFeatureProfile: MapFeatureProfile;
+  metadataEvidence: MetadataEvidence[];
   searchQueries: SearchQuery[];
   searchProcess: SearchProcessStep[];
   imageAnalysis: ImageAnalysis;
