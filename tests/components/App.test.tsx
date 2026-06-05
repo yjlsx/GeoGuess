@@ -136,7 +136,7 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("区域范围"), { target: { value: "country" } });
     expect(screen.getByLabelText("国家/地区")).toBeInTheDocument();
     expect(screen.getByLabelText("视觉模型 API Key")).toBeInTheDocument();
-    expect(screen.getByLabelText("视觉模型 Base URL")).toBeInTheDocument();
+    expect(screen.queryByLabelText("视觉模型 Base URL")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("OCR 文字")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("可见标识")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("地物特征")).not.toBeInTheDocument();
@@ -154,30 +154,54 @@ describe("App", () => {
     expect(screen.getByText("可上传多张连续截图或一小段视频，系统会合并可见地物、站台、建筑、道路和视角线索。")).toBeInTheDocument();
   });
 
-  it("saves and restores non-secret model configuration locally", () => {
+  it("saves and restores non-secret model configuration locally without a custom base URL", () => {
     const { unmount } = render(<App />);
 
     openSettings();
     fireEvent.change(screen.getByLabelText("视觉模型 API Key"), { target: { value: "saved-api-key" } });
-    fireEvent.change(screen.getByLabelText("视觉模型 Base URL"), { target: { value: "https://proxy.example/v1" } });
     fireEvent.change(screen.getByLabelText("视觉模型名称"), { target: { value: "vision-model" } });
     fireEvent.change(screen.getByLabelText("输出语言"), { target: { value: "en-US" } });
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
 
     expect(screen.getByText("配置已保存到本机浏览器；API Key 仅用于本次会话，不会持久保存。")).toBeInTheDocument();
     expect(localStorage.getItem("imageGeoFinder.settings")).not.toContain("saved-api-key");
+    expect(localStorage.getItem("imageGeoFinder.settings")).not.toContain("baseUrl");
     unmount();
     render(<App />);
     openSettings();
 
     expect(screen.getByLabelText("视觉模型 API Key")).toHaveValue("");
-    expect(screen.getByLabelText("视觉模型 Base URL")).toHaveValue("https://proxy.example/v1");
+    expect(screen.queryByLabelText("视觉模型 Base URL")).not.toBeInTheDocument();
     expect(screen.getByLabelText("视觉模型名称")).toHaveValue("vision-model");
     expect(screen.getByLabelText("输出语言")).toHaveValue("en-US");
   });
 
-  it("loads selectable models from the configured base URL and API key", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+  it("ignores a stale saved custom base URL", () => {
+    localStorage.setItem(
+      "imageGeoFinder.settings",
+      JSON.stringify({
+        outputLanguage: "zh-CN",
+        visionConfig: {
+          baseUrl: "https://proxy.example/v1",
+          model: "vision-model",
+          matchingThreshold: 0.72,
+          maxCandidates: 20,
+          coordinateSystem: "WGS84 (EPSG:4326)",
+          terrainValidation: true
+        }
+      })
+    );
+
+    render(<App />);
+    openSettings();
+
+    expect(screen.queryByLabelText("视觉模型 Base URL")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+    expect(localStorage.getItem("imageGeoFinder.settings")).not.toContain("baseUrl");
+  });
+
+  it("loads selectable models with the configured API key", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       headers: new Headers({ "content-type": "application/json" }),
       json: async () => ({ models: ["geo-vision-v2", "gpt-4o"] })
@@ -186,10 +210,12 @@ describe("App", () => {
 
     openSettings();
     fireEvent.change(screen.getByLabelText("视觉模型 API Key"), { target: { value: "test-api-key" } });
-    fireEvent.change(screen.getByLabelText("视觉模型 Base URL"), { target: { value: "https://proxy.example/v1" } });
     fireEvent.click(screen.getByRole("button", { name: "获取模型列表" }));
 
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith("/api/models", expect.any(Object)));
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      apiKey: "test-api-key"
+    });
     expect(await screen.findByText("已获取 2 个模型")).toBeInTheDocument();
     expect(screen.getByLabelText("视觉模型名称")).toHaveValue("gpt-4o");
     fireEvent.change(screen.getByLabelText("视觉模型名称"), { target: { value: "geo-vision-v2" } });
@@ -308,7 +334,6 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("时间提示"), { target: { value: "night" } });
     fireEvent.change(screen.getByLabelText("备注"), { target: { value: "near a river" } });
     fireEvent.change(screen.getByLabelText("视觉模型 API Key"), { target: { value: "test-api-key" } });
-    fireEvent.change(screen.getByLabelText("视觉模型 Base URL"), { target: { value: "https://proxy.example/v1" } });
     fireEvent.change(screen.getByLabelText("视觉模型名称"), { target: { value: "vision-model" } });
 
     fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
@@ -331,7 +356,6 @@ describe("App", () => {
     expect(formData.has("coordinateBox")).toBe(false);
     expect(JSON.parse(formData.get("visionConfig") as string)).toEqual({
       apiKey: "test-api-key",
-      baseUrl: "https://proxy.example/v1",
       model: "vision-model",
       matchingThreshold: 0.6,
       maxCandidates: 10,
