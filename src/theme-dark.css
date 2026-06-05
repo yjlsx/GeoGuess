@@ -163,7 +163,7 @@ body,
 
 .app-shell .field input::placeholder,
 .app-shell .field textarea::placeholder {
-  color: #5f7characters;
+  color: #64748b;
 }
 
 .app-shell .field input:focus,
