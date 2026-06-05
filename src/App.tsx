@@ -5,6 +5,12 @@ import { ImageInput } from "./components/ImageInput";
 import { ScopeForm } from "./components/ScopeForm";
 import { VisionModelSettings } from "./components/VisionModelSettings";
 import { buildReports } from "./shared/reportGenerator";
+import {
+  copyReportToClipboard,
+  exportReportAsHtml,
+  exportReportAsMarkdown,
+  printReport
+} from "./shared/reportExport";
 import { sampleInvestigationInput } from "./shared/sampleInvestigation";
 import type { CropMode, Investigation, OutputLanguage, UserScope, VisionModelConfig } from "./shared/types";
 
@@ -377,6 +383,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [modelListStatus, setModelListStatus] = useState<string | null>(null);
   const [modelListLoading, setModelListLoading] = useState(false);
@@ -414,6 +421,7 @@ export default function App() {
     setFiles(nextFiles);
     setInvestigation(null);
     setError(null);
+    setExportStatus(null);
     setAnalysisStartedAt(null);
     setAnalysisFinishedAt(null);
     setAnalysisProgress(0);
@@ -459,6 +467,7 @@ export default function App() {
 
   async function analyze() {
     setError(null);
+    setExportStatus(null);
     setAnalysisStartedAt(null);
     setAnalysisFinishedAt(null);
     setAnalysisProgress(0);
@@ -561,6 +570,7 @@ export default function App() {
 
   function showSampleInvestigation() {
     setError(null);
+    setExportStatus(null);
     const nextInvestigation = buildSampleInvestigation(outputLanguage);
     setInvestigation(nextInvestigation);
     const now = Date.now();
@@ -574,6 +584,42 @@ export default function App() {
   function saveSettings() {
     localStorage.setItem(settingsStorageKey, JSON.stringify(settingsForStorage()));
     setSaveStatus("配置已保存到本机浏览器；API Key 仅用于本次会话，不会持久保存。");
+  }
+
+  function handleDownloadMarkdown() {
+    if (!investigation) {
+      return;
+    }
+    exportReportAsMarkdown(investigation);
+    setExportStatus("已导出 Markdown 报告。");
+  }
+
+  function handleDownloadHtml() {
+    if (!investigation) {
+      return;
+    }
+    exportReportAsHtml(investigation);
+    setExportStatus("已导出 HTML 报告。");
+  }
+
+  function handlePrintReport() {
+    if (!investigation) {
+      return;
+    }
+    const opened = printReport(investigation);
+    setExportStatus(
+      opened
+        ? "已打开打印窗口，可在打印对话框中选择“另存为 PDF”。"
+        : "无法打开打印窗口，请检查浏览器是否拦截了弹窗。"
+    );
+  }
+
+  async function handleCopyReport() {
+    if (!investigation) {
+      return;
+    }
+    const ok = await copyReportToClipboard(investigation);
+    setExportStatus(ok ? "报告内容已复制到剪贴板。" : "复制失败，请手动选择文本复制。");
   }
 
   return (
@@ -715,6 +761,31 @@ export default function App() {
             analysisFinishedAt={analysisFinishedAt}
             now={clockNow}
           />
+          {investigation ? (
+            <section
+              className="report-export-bar"
+              aria-label="报告导出与分享"
+              style= display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", margin: "12px 0" 
+            >
+              <button className="secondary-button" type="button" onClick={handlePrintReport}>
+                打印 / 导出 PDF
+              </button>
+              <button className="small-button" type="button" onClick={handleDownloadMarkdown}>
+                下载 Markdown
+              </button>
+              <button className="small-button" type="button" onClick={handleDownloadHtml}>
+                下载 HTML
+              </button>
+              <button className="small-button" type="button" onClick={handleCopyReport}>
+                复制报告
+              </button>
+              {exportStatus ? (
+                <span className="save-status" role="status">
+                  {exportStatus}
+                </span>
+              ) : null}
+            </section>
+          ) : null}
           <CandidateResults
             investigation={investigation}
             loading={loading}
