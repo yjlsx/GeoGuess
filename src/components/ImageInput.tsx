@@ -25,7 +25,7 @@ export function ImageInput({ files, displayAssetName = null, notes, onFileChange
   }, [firstFile]);
 
   return (
-    <section className="panel workflow-panel">
+    <section className={displayedAssetName ? "panel workflow-panel image-input-panel has-asset" : "panel workflow-panel image-input-panel"}>
       <div className="section-heading compact-heading">
         <span className="step-number">1</span>
         <div>

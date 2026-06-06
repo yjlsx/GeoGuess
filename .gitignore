@@ -2,6 +2,7 @@
 .data/
 dist/
 tmp-test-output/
+logs/
 node_modules/
 .env
 .env.*

@@ -48,7 +48,7 @@ function isSourceOnly(value: string) {
 }
 
 function isViewpoint(value: string) {
-  return /(camera|view|looking|foreground|background|north|south|east|west|angle|shadow|left|right|front|behind|near|far|parallel|perpendicular|视角|镜头|前景|后方|左|右|前|后|远|近|北|南|东|西|阴影|朝向|平行|垂直)/i.test(
+  return /(camera|view|looking|facing|foreground|background|angle|viewpoint|视角|镜头|前景|背景|朝向|拍摄方向)/i.test(
     value
   );
 }
@@ -58,10 +58,7 @@ function buildInstruction(profile: Omit<MapFeatureProfile, "searchInstruction">)
     profile.primaryFeatures.length ? `Primary map checks: ${profile.primaryFeatures.join("; ")}` : "",
     profile.spatialRelationships.length ? `Spatial checks: ${profile.spatialRelationships.join("; ")}` : "",
     profile.viewpointConstraints.length ? `Viewpoint checks: ${profile.viewpointConstraints.join("; ")}` : "",
-    profile.auxiliaryTextClues.length ? `Auxiliary text only: ${profile.auxiliaryTextClues.join("; ")}` : "",
-    profile.excludedSourceOnlyClues.length
-      ? `Do not use as primary location proof: ${profile.excludedSourceOnlyClues.join("; ")}`
-      : ""
+    profile.auxiliaryTextClues.length ? `Auxiliary text only: ${profile.auxiliaryTextClues.join("; ")}` : ""
   ].filter(Boolean);
 
   return parts.join(". ");

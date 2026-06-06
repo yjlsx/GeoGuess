@@ -106,7 +106,8 @@ npm run preview    # Preview the production build
 ## API Key and Privacy Notes
 
 - API keys are used only in the current browser session.
-- Saved settings do not persist the API key.
+- Saved settings do not persist the API key or Base URL.
+- Private OpenAI-compatible endpoints can be configured with the backend `OPENAI_BASE_URL` environment variable, or entered temporarily in the page settings.
 - Uploaded assets are processed by the local backend.
 - Investigation history is stored locally in browser localStorage.
 - If you connect a third-party OpenAI-compatible service, images and prompts will be sent to that provider. Review the provider's privacy and data handling policies before use.

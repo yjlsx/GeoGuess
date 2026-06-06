@@ -9,6 +9,7 @@ import { extractVideoFrames, VideoFrameExtractionError } from "./videoFrames";
 
 export const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const defaultOpenAIBaseUrl = "https://api.openai.com/v1";
 
 class ClientInputError extends Error {
   statusCode = 400;
@@ -83,6 +84,10 @@ const modelListSchema = z.object({
   baseUrl: z.string().url().optional()
 });
 
+function openAIBaseUrlFromConfig(baseUrl?: string) {
+  return (baseUrl?.trim() || process.env.OPENAI_BASE_URL?.trim() || defaultOpenAIBaseUrl).replace(/\/+$/, "");
+}
+
 function parseJsonField(value: unknown, fieldName: string) {
   if (value === undefined) {
     return undefined;
@@ -106,7 +111,7 @@ app.get("/api/health", (_req, res) => {
 app.post("/api/models", async (req, res, next) => {
   try {
     const parsed = modelListSchema.parse(req.body);
-    const baseUrl = (parsed.baseUrl?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const baseUrl = openAIBaseUrlFromConfig(parsed.baseUrl);
     const response = await fetch(`${baseUrl}/models`, {
       headers: {
         Authorization: `Bearer ${parsed.apiKey}`,

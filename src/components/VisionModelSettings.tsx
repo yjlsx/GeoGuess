@@ -46,7 +46,7 @@ export function VisionModelSettings({ availableModels, modelListStatus, modelLis
           <input
             value={value.baseUrl ?? ""}
             onChange={(event) => set("baseUrl", event.target.value)}
-            placeholder="https://api.openai.com/v1"
+            placeholder="可留空，或填写自己的兼容接口"
           />
         </label>
         <label className="field">

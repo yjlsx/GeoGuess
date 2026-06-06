@@ -3,7 +3,6 @@ import { CandidateResults } from "./components/CandidateResults";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { ImageInput } from "./components/ImageInput";
 import { ScopeForm } from "./components/ScopeForm";
-import { VisionModelSettings } from "./components/VisionModelSettings";
 import { buildReports } from "./shared/reportGenerator";
 import {
   copyReportToClipboard,
@@ -19,7 +18,7 @@ const historyStorageKey = "imageGeoFinder.history";
 const latestInvestigationStorageKey = "imageGeoFinder.latestInvestigation";
 const historyLimit = 12;
 const defaultScope: UserScope = {
-  regionScope: "custom",
+  regionScope: "country",
   boundaryMode: "rectangle",
   coordinateBox: { minLat: 28, minLon: 112, maxLat: 34, maxLon: 118 }
 };
@@ -27,6 +26,11 @@ const defaultScope: UserScope = {
 type SavedSettings = {
   outputLanguage?: OutputLanguage;
   visionConfig?: VisionModelConfig;
+};
+
+type LegacyVisionModelConfig = VisionModelConfig & {
+  apiKey?: string;
+  baseUrl?: string;
 };
 
 type HistoryItem = {
@@ -45,37 +49,6 @@ type SavedInvestigationState = {
   analysisFinishedAt: number | null;
 };
 
-type WorkbenchStatusProps = {
-  assetName: string | null;
-  fileCount: number;
-  hasVisionKey: boolean;
-  hasInvestigation: boolean;
-  loading: boolean;
-  candidateCount: number;
-  modelName: string;
-  error: string | null;
-  progress: number;
-  analysisStartedAt: number | null;
-  analysisFinishedAt: number | null;
-  now: number;
-};
-
-function formatStatusDate(timestamp: number | null) {
-  if (!timestamp) {
-    return "--";
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  }).format(new Date(timestamp));
-}
-
 function formatHistoryDate(value: string | number | null | undefined) {
   if (!value) {
     return "时间未知";
@@ -93,16 +66,6 @@ function formatHistoryDate(value: string | number | null | undefined) {
     minute: "2-digit",
     hour12: false
   }).format(date);
-}
-
-function formatElapsed(startedAt: number | null, finishedAt: number | null, now: number) {
-  if (!startedAt) {
-    return "--";
-  }
-  const elapsedSeconds = Math.max(0, Math.floor(((finishedAt ?? now) - startedAt) / 1000));
-  const minutes = Math.floor(elapsedSeconds / 60);
-  const seconds = elapsedSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function estimateAnalysisProgress(startedAt: number, now: number) {
@@ -135,109 +98,6 @@ function bestCandidateScore(investigation: Investigation | null) {
   return typeof score === "number" ? `${Math.round(score * 100)}%` : "--";
 }
 
-function WorkbenchStatus({
-  assetName,
-  fileCount,
-  hasVisionKey,
-  hasInvestigation,
-  loading,
-  candidateCount,
-  modelName,
-  error,
-  progress,
-  analysisStartedAt,
-  analysisFinishedAt,
-  now
-}: WorkbenchStatusProps) {
-  const clampedProgress = Math.max(0, Math.min(100, progress));
-  const analysisStatus = error
-    ? `分析失败：${error}`
-    : loading
-      ? clampedProgress >= 86
-        ? `等待模型返回... ${clampedProgress}%`
-        : `分析中... ${clampedProgress}%`
-      : hasInvestigation
-        ? "分析完成 100%"
-        : fileCount > 0
-          ? "待开始"
-          : "待命";
-
-  return (
-    <section className="workbench-status-bar" aria-label="定位核验工作台状态">
-      <div className="status-pill asset-status">
-        <span>资产</span>
-        <strong>{assetName ?? "未上传"}</strong>
-      </div>
-      <div className={hasVisionKey ? "status-pill ready" : "status-pill"}>
-        <span>模型状态</span>
-        <strong>{hasVisionKey ? `${modelName || "未选择模型"} 已就绪` : "未配置"}</strong>
-      </div>
-      <div
-        className={loading ? "status-pill in-progress" : hasInvestigation ? "status-pill ready" : error ? "status-pill error-pill" : "status-pill"}
-        title={error ?? undefined}
-      >
-        <span>分析状态</span>
-        <strong>{analysisStatus}</strong>
-        {loading || hasInvestigation ? (
-          <div className="status-progress" aria-hidden="true">
-            <span style={ { width: `${hasInvestigation ? 100 : clampedProgress}%` } } />
-          </div>
-        ) : null}
-      </div>
-      <div className={candidateCount > 0 ? "status-pill ready" : "status-pill"}>
-        <span>候选结果</span>
-        <strong>{candidateCount > 0 ? `${candidateCount} 个候选位置` : "0"}</strong>
-      </div>
-      <div className={analysisStartedAt ? "status-pill ready" : "status-pill"}>
-        <span>开始时间</span>
-        <strong>{formatStatusDate(analysisStartedAt)}</strong>
-      </div>
-      <div className={analysisStartedAt ? "status-pill ready" : "status-pill"}>
-        <span>耗时</span>
-        <strong>{formatElapsed(analysisStartedAt, analysisFinishedAt, now)}</strong>
-      </div>
-    </section>
-  );
-}
-
-function ModelSidebarPanel({
-  availableModels,
-  hasVisionKey,
-  modelListLoading,
-  modelListStatus,
-  onFetchModels,
-  onVisionConfigChange,
-  value
-}: {
-  availableModels: string[];
-  hasVisionKey: boolean;
-  modelListLoading: boolean;
-  modelListStatus: string | null;
-  onFetchModels: () => void;
-  onVisionConfigChange: (value: VisionModelConfig) => void;
-  value: VisionModelConfig;
-}) {
-  return (
-    <section className="panel model-sidebar-panel">
-      <div className="section-heading compact-heading">
-        <span className="step-number">2</span>
-        <div>
-          <h2>模型配置</h2>
-        </div>
-      </div>
-      <VisionModelSettings
-        availableModels={availableModels}
-        modelListLoading={modelListLoading}
-        modelListStatus={modelListStatus}
-        value={value}
-        onChange={onVisionConfigChange}
-        onFetchModels={onFetchModels}
-      />
-      <p className={hasVisionKey ? "model-ready-note ready" : "model-ready-note"}>{hasVisionKey ? "模型已就绪，可开始分析。" : "请填写 API Key 后开始分析。"}</p>
-    </section>
-  );
-}
-
 function loadSavedSettings(): SavedSettings {
   try {
     const raw = localStorage.getItem(settingsStorageKey);
@@ -245,10 +105,11 @@ function loadSavedSettings(): SavedSettings {
       return {};
     }
     const parsed = JSON.parse(raw) as SavedSettings;
-    const savedVisionConfig = parsed.visionConfig && typeof parsed.visionConfig === "object" ? parsed.visionConfig : undefined;
+    const savedVisionConfig = parsed.visionConfig && typeof parsed.visionConfig === "object" ? (parsed.visionConfig as LegacyVisionModelConfig) : undefined;
+    const { apiKey: _apiKey, baseUrl: _baseUrl, ...safeVisionConfig } = savedVisionConfig ?? {};
     return {
       outputLanguage: parsed.outputLanguage === "en-US" || parsed.outputLanguage === "zh-CN" ? parsed.outputLanguage : undefined,
-      visionConfig: savedVisionConfig ? { ...savedVisionConfig, apiKey: undefined } : undefined
+      visionConfig: savedVisionConfig ? safeVisionConfig : undefined
     };
   } catch {
     return {};
@@ -340,7 +201,7 @@ function buildSampleInvestigation(outputLanguage: OutputLanguage): Investigation
 }
 
 function buildRequestScope(scope: UserScope): UserScope {
-  const regionScope = scope.regionScope ?? "custom";
+  const regionScope = scope.regionScope ?? "country";
   const baseScope: UserScope = {
     regionScope,
     notes: scope.notes
@@ -418,6 +279,7 @@ export default function App() {
   const savedSettings = loadSavedSettings();
   const savedInvestigation = loadLatestInvestigation();
   const [files, setFiles] = useState<File[]>([]);
+  const [assetPreviewUrls, setAssetPreviewUrls] = useState<string[]>([]);
   const cropMode: CropMode = "full";
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>(savedSettings.outputLanguage ?? "zh-CN");
   const [visionConfig, setVisionConfig] = useState<VisionModelConfig>(
@@ -451,6 +313,21 @@ export default function App() {
   const candidateCount = investigation?.candidates.length ?? 0;
   const assetName = files[0]?.name ?? (investigation ? getAssetName(investigation) : null);
   const selectedModelName = visionConfig.model?.trim() || "gpt-4o";
+  const primaryAssetPreviewUrl = assetPreviewUrls[0] ?? null;
+  const primaryAssetMediaType = files[0]?.type ?? null;
+
+  useEffect(() => {
+    if (files.length === 0 || typeof URL.createObjectURL !== "function") {
+      setAssetPreviewUrls([]);
+      return;
+    }
+
+    const urls = files.map((file) => URL.createObjectURL(file));
+    setAssetPreviewUrls(urls);
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [files]);
 
   useEffect(() => {
     if (!loading || !analysisStartedAt) {
@@ -575,7 +452,7 @@ export default function App() {
   }
 
   function settingsForStorage() {
-    const { apiKey: _apiKey, ...safeVisionConfig } = visionConfig;
+    const { apiKey: _apiKey, baseUrl: _baseUrl, ...safeVisionConfig } = visionConfig;
     return {
       outputLanguage,
       visionConfig: safeVisionConfig
@@ -748,7 +625,20 @@ export default function App() {
       <header className="app-header">
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true" />
-          <h1>GeoGuess</h1>
+          <div>
+            <h1>GeoGuess</h1>
+            <p>OSINT 地理定位调查指挥中心</p>
+          </div>
+        </div>
+        <div className="command-meta" aria-label="项目状态">
+          <span>
+            项目：
+            <strong>{investigation?.id ? investigation.id.slice(0, 16) : "LOCAL-WORKBENCH"}</strong>
+          </span>
+          <span className={loading ? "command-live active" : investigation ? "command-live ready" : "command-live"}>
+            状态：
+            <strong>{loading ? "分析中" : investigation ? "已就绪" : "待命"}</strong>
+          </span>
         </div>
         <nav className="header-nav" aria-label="工作台导航">
           <div className="settings-menu">
@@ -855,15 +745,6 @@ export default function App() {
             onFileChange={handleFileChange}
             onNotesChange={updateNotes}
           />
-          <ModelSidebarPanel
-            availableModels={availableModels}
-            hasVisionKey={hasVisionKey}
-            modelListLoading={modelListLoading}
-            modelListStatus={modelListStatus}
-            value={visionConfig}
-            onFetchModels={fetchModels}
-            onVisionConfigChange={setVisionConfig}
-          />
           <ScopeForm value={scope} onChange={setScope} />
           <section className="analysis-action-panel">
             <p className="sr-only">自动识别 OCR / 地物 / 设施 / 空间关系</p>
@@ -876,46 +757,6 @@ export default function App() {
           </section>
         </aside>
         <div className="main-workbench">
-          <WorkbenchStatus
-            assetName={assetName}
-            fileCount={files.length}
-            hasVisionKey={hasVisionKey}
-            hasInvestigation={Boolean(investigation)}
-            loading={loading}
-            candidateCount={candidateCount}
-            modelName={selectedModelName}
-            error={error}
-            progress={analysisProgress}
-            analysisStartedAt={analysisStartedAt}
-            analysisFinishedAt={analysisFinishedAt}
-            now={clockNow}
-          />
-          {investigation ? (
-            <section className="report-export-bar" aria-label="报告导出与分享" style={ { display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", margin: "12px 0" } }>
-              <button className="secondary-button" type="button" onClick={handlePrintReport}>
-                打印 / 导出 PDF
-              </button>
-              <button className="small-button" type="button" onClick={handleDownloadMarkdown}>
-                下载 Markdown
-              </button>
-              <button className="small-button" type="button" onClick={handleDownloadHtml}>
-                下载 HTML
-              </button>
-              <button className="small-button" type="button" onClick={handleCopyReport}>
-                复制报告
-              </button>
-              {comparisonInvestigation ? (
-                <button className="small-button" type="button" onClick={() => setComparisonInvestigation(null)}>
-                  关闭对比
-                </button>
-              ) : null}
-              {exportStatus ? (
-                <span className="save-status" role="status">
-                  {exportStatus}
-                </span>
-              ) : null}
-            </section>
-          ) : null}
           {investigation && comparisonInvestigation ? (
             <section className="panel" aria-label="历史调查对比" style={ { display: "grid", gap: "8px", marginBottom: "10px" } }>
               <div className="card-title-row">
@@ -943,17 +784,44 @@ export default function App() {
             </section>
           ) : null}
           <CandidateResults
+            assetMediaType={primaryAssetMediaType}
+            assetName={assetName}
+            assetPreviewUrl={primaryAssetPreviewUrl}
+            exportStatus={exportStatus}
             investigation={investigation}
             loading={loading}
             error={error}
             hasImage={files.length > 0}
             hasVisionKey={hasVisionKey}
             analysisProgress={analysisProgress}
+            analysisStartedAt={analysisStartedAt}
+            analysisFinishedAt={analysisFinishedAt}
             matchingThreshold={visionConfig.matchingThreshold ?? 0.6}
+            modelName={selectedModelName}
+            now={clockNow}
+            onCopyReport={handleCopyReport}
+            onDownloadHtml={handleDownloadHtml}
+            onDownloadMarkdown={handleDownloadMarkdown}
+            onPrintReport={handlePrintReport}
             onShowSample={showSampleInvestigation}
           />
         </div>
       </div>
+      <footer className="command-footer" aria-label="系统活动">
+        <div>
+          <span>系统状态</span>
+          <strong>{error ? "需要处理错误" : "全部服务正常"}</strong>
+        </div>
+        <div>
+          <span>使用量</span>
+          <strong>{history.length} / {historyLimit} 条本地记录</strong>
+        </div>
+        <div>
+          <span>活动日志</span>
+          <strong>{loading ? "分析任务运行中" : investigation ? "候选生成完成" : "等待上传素材"}</strong>
+        </div>
+        <a href="#root">查看完整日志</a>
+      </footer>
     </main>
   );
 }

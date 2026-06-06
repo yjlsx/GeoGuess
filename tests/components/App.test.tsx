@@ -111,6 +111,10 @@ function openSettings() {
   fireEvent.click(screen.getByRole("button", { name: "设置" }));
 }
 
+function openAdvancedDetails() {
+  fireEvent.click(screen.getByText("高级核验详情"));
+}
+
 describe("App", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -119,24 +123,22 @@ describe("App", () => {
 
   it("renders the investigation workspace", () => {
     render(<App />);
-    expect(screen.getByRole("heading", { name: "GeoVerify OSINT" })).toBeInTheDocument();
-    expect(screen.getByText("地理位置验证工作台")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "GeoGuess" })).toBeInTheDocument();
+    expect(screen.getByText("OSINT 地理定位调查指挥中心")).toBeInTheDocument();
     expect(screen.getByText("模型状态")).toBeInTheDocument();
     expect(screen.getByText("分析状态")).toBeInTheDocument();
-    expect(screen.getByText("候选结果")).toBeInTheDocument();
+    expect(screen.getByText("暂无候选")).toBeInTheDocument();
     expect(screen.getByText("开始时间")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "设置" })).toBeInTheDocument();
     openSettings();
     expect(screen.getByRole("heading", { name: "配置" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "视觉模型" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存配置" })).toBeInTheDocument();
     expect(screen.getByText("自动识别 OCR / 地物 / 设施 / 空间关系")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("区域范围"), { target: { value: "country" } });
+    expect(screen.getByLabelText("区域范围")).toHaveValue("country");
     expect(screen.getByLabelText("国家/地区")).toBeInTheDocument();
     expect(screen.getByLabelText("视觉模型 API Key")).toBeInTheDocument();
-    expect(screen.queryByLabelText("视觉模型 Base URL")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("视觉模型 Base URL")).toBeInTheDocument();
     expect(screen.queryByLabelText("OCR 文字")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("可见标识")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("地物特征")).not.toBeInTheDocument();
@@ -154,11 +156,24 @@ describe("App", () => {
     expect(screen.getByText("可上传多张连续截图或一小段视频，系统会合并可见地物、站台、建筑、道路和视角线索。")).toBeInTheDocument();
   });
 
-  it("saves and restores non-secret model configuration locally without a custom base URL", () => {
+  it("supports searching and selecting a country or region", () => {
+    render(<App />);
+
+    const countryInput = screen.getByLabelText("国家/地区");
+    fireEvent.focus(countryInput);
+    fireEvent.change(countryInput, { target: { value: "jap" } });
+
+    fireEvent.click(screen.getByRole("option", { name: /日本/i }));
+
+    expect(countryInput).toHaveValue("日本");
+  });
+
+  it("saves and restores non-secret model configuration locally", () => {
     const { unmount } = render(<App />);
 
     openSettings();
     fireEvent.change(screen.getByLabelText("视觉模型 API Key"), { target: { value: "saved-api-key" } });
+    fireEvent.change(screen.getByLabelText("视觉模型 Base URL"), { target: { value: "https://proxy.example/v1" } });
     fireEvent.change(screen.getByLabelText("视觉模型名称"), { target: { value: "vision-model" } });
     fireEvent.change(screen.getByLabelText("输出语言"), { target: { value: "en-US" } });
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
@@ -171,12 +186,12 @@ describe("App", () => {
     openSettings();
 
     expect(screen.getByLabelText("视觉模型 API Key")).toHaveValue("");
-    expect(screen.queryByLabelText("视觉模型 Base URL")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("视觉模型 Base URL")).toHaveValue("");
     expect(screen.getByLabelText("视觉模型名称")).toHaveValue("vision-model");
     expect(screen.getByLabelText("输出语言")).toHaveValue("en-US");
   });
 
-  it("ignores a stale saved custom base URL", () => {
+  it("drops a legacy saved custom base URL from persisted settings", () => {
     localStorage.setItem(
       "imageGeoFinder.settings",
       JSON.stringify({
@@ -195,8 +210,9 @@ describe("App", () => {
     render(<App />);
     openSettings();
 
-    expect(screen.queryByLabelText("视觉模型 Base URL")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("视觉模型 Base URL")).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+    expect(localStorage.getItem("imageGeoFinder.settings")).not.toContain("https://proxy.example/v1");
     expect(localStorage.getItem("imageGeoFinder.settings")).not.toContain("baseUrl");
   });
 
@@ -210,11 +226,13 @@ describe("App", () => {
 
     openSettings();
     fireEvent.change(screen.getByLabelText("视觉模型 API Key"), { target: { value: "test-api-key" } });
+    fireEvent.change(screen.getByLabelText("视觉模型 Base URL"), { target: { value: "https://proxy.example/v1" } });
     fireEvent.click(screen.getByRole("button", { name: "获取模型列表" }));
 
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalledWith("/api/models", expect.any(Object)));
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
-      apiKey: "test-api-key"
+      apiKey: "test-api-key",
+      baseUrl: "https://proxy.example/v1"
     });
     expect(await screen.findByText("已获取 2 个模型")).toBeInTheDocument();
     expect(screen.getByLabelText("视觉模型名称")).toHaveValue("gpt-4o");
@@ -257,6 +275,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent("分析过程");
+    openAdvancedDetails();
     expect(screen.getByText("分析中... 8%")).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "分析进度" })).toHaveAttribute("aria-valuenow", "8");
     expect(screen.getByText("上传原图与素材")).toBeInTheDocument();
@@ -289,6 +308,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "查看示例证据链" }));
 
     expect(await screen.findAllByText("42.25967, 112.75623")).not.toHaveLength(0);
+    openAdvancedDetails();
     expect(screen.getByText("自动识别线索")).toBeInTheDocument();
     expect(screen.getByText("Google Maps 卫星图像预览")).toBeInTheDocument();
     expect(screen.getByText("打开 Google Earth")).toBeInTheDocument();
@@ -457,6 +477,7 @@ describe("App", () => {
     expect(screen.getAllByText("camera south of tracks looking north")).not.toHaveLength(0);
     expect(screen.getAllByText("高置信")).not.toHaveLength(0);
     expect(screen.queryByText("high")).not.toBeInTheDocument();
+    openAdvancedDetails();
     expect(screen.getByText("核验工作台")).toBeInTheDocument();
     expect(screen.getByText("待核验候选（Top 1）")).toBeInTheDocument();
     expect(screen.getAllByText("Earth 截图核验位")).not.toHaveLength(0);
@@ -562,6 +583,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
 
     expect(await screen.findAllByText("36.33330, 140.44440")).not.toHaveLength(0);
+    openAdvancedDetails();
     const candidateHeadings = screen.getAllByText(/候选 \d：/);
     expect(candidateHeadings[0]).toHaveTextContent("候选 1：Higher score location");
     expect(candidateHeadings[1]).toHaveTextContent("候选 2：Lower score location");
@@ -622,6 +644,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
 
     expect(await screen.findByText("尚未生成候选坐标")).toBeInTheDocument();
+    openAdvancedDetails();
     expect(screen.getByText("地图与 Earth 核验")).toBeInTheDocument();
     expect(screen.getByText("当前候选")).toBeInTheDocument();
     expect(screen.queryByText("当前候选（排名 0）")).not.toBeInTheDocument();

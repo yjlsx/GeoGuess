@@ -16,6 +16,7 @@ type FetchLike = (url: string, init: RequestInit) => Promise<{
 }>;
 
 type OpenAISearchProviderOptions = VisionModelConfig & {
+  baseUrl?: string;
   fetchImpl?: FetchLike;
 };
 
@@ -299,7 +300,7 @@ export function createOpenAISearchProvider(options: OpenAISearchProviderOptions)
     throw new Error("联网候选搜索 API Key 不能为空。");
   }
 
-  const baseUrl = (options.baseUrl?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
+  const baseUrl = (options.baseUrl?.trim() || process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
   const model = options.model?.trim() || "gpt-4o";
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   if (!fetchImpl) {

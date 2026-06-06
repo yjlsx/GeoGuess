@@ -24,6 +24,7 @@ type OpenAICompatibleClient = {
 };
 
 type CreateOpenAIVisionProviderOptions = VisionModelConfig & {
+  baseUrl?: string;
   clientFactory?: (options: OpenAIClientOptions) => OpenAICompatibleClient;
 };
 
@@ -153,7 +154,7 @@ export function createOpenAIVisionProvider(options: CreateOpenAIVisionProviderOp
     ((clientOptions: OpenAIClientOptions) => new OpenAI(clientOptions) as unknown as OpenAICompatibleClient);
   const client = clientFactory({
     apiKey,
-    baseURL: options.baseUrl?.trim() || undefined
+    baseURL: options.baseUrl?.trim() || process.env.OPENAI_BASE_URL?.trim() || undefined
   });
   const model = options.model?.trim() || "gpt-4o";
 

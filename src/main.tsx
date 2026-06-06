@@ -4,6 +4,7 @@ import App from "./App";
 import "./styles.css";
 import "./theme-dark.css";
 import "./ui-polish.css";
+import "./command-center.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
