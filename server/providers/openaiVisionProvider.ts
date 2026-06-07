@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
 import OpenAI from "openai";
+import { sanitizeExtractedClues } from "../../src/shared/clueSanitizer";
 import type { ExtractedClues, UserScope, VisionModelConfig } from "../../src/shared/types";
 import type { VisionProvider } from "./types";
 
@@ -71,13 +72,23 @@ function dedupeAndLimit(items: string[], limit: number) {
 
 function normalizeClues(value: unknown): ExtractedClues {
   const source = value && typeof value === "object" ? (value as Partial<Record<keyof ExtractedClues, unknown>>) : {};
-  return {
+  const normalized = sanitizeExtractedClues({
     ocrText: dedupeAndLimit(cleanList(source.ocrText), 16),
     visibleLabels: dedupeAndLimit(cleanList(source.visibleLabels), 12),
     languages: dedupeAndLimit(cleanList(source.languages), 6),
     sceneFeatures: dedupeAndLimit(cleanList(source.sceneFeatures), 18),
     spatialRelationships: dedupeAndLimit(cleanList(source.spatialRelationships), 16),
     inferredSearchTerms: dedupeAndLimit(cleanList(source.inferredSearchTerms), 14)
+  });
+
+  return {
+    ...normalized,
+    ocrText: normalized.ocrText.slice(0, 16),
+    visibleLabels: normalized.visibleLabels.slice(0, 12),
+    languages: normalized.languages.slice(0, 6),
+    sceneFeatures: normalized.sceneFeatures.slice(0, 18),
+    spatialRelationships: normalized.spatialRelationships.slice(0, 16),
+    inferredSearchTerms: normalized.inferredSearchTerms.slice(0, 14)
   };
 }
 
@@ -136,6 +147,7 @@ function buildPrompt(scopeText: string) {
     "- 不要凭感觉猜测国家、城市、单位名称或坐标。只有画面直接显示或由用户范围约束明确支持时才写。",
     "- 军事、交通、政府或企业设施只能用通用描述，除非画面文字明确给出名称。",
     "- 如果某项不确定，用保守描述，例如 'possible rail platform'、'疑似训练场开阔地'。",
+    "- 台标、角标、水印、字幕条、时间戳、logo bug、channel bug、ticker、overlay 等媒体叠层只能写入 ocrText/visibleLabels；不要写入 sceneFeatures、spatialRelationships 或 inferredSearchTerms。",
     "- sceneFeatures 写具体可核验物体；spatialRelationships 写相对位置和视角；inferredSearchTerms 写适合联网搜索的组合词。",
     "",
     "用户已知范围：",

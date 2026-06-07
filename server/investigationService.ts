@@ -3,6 +3,8 @@ import { buildMapFeatureProfile } from "../src/shared/mapFeatureProfile";
 import { buildCandidateOsintLinks } from "../src/shared/osintLinks";
 import { buildSearchQueries } from "../src/shared/queryPlanner";
 import { buildReports } from "../src/shared/reportGenerator";
+import { sanitizeExtractedClues } from "../src/shared/clueSanitizer";
+import { searchPurposeLabel } from "../src/shared/searchPurposeLabels";
 import { buildSeasonalAnalysis } from "../src/shared/seasonalAnalysis";
 import type {
   CropMode,
@@ -88,33 +90,36 @@ function withStageMessage(error: unknown, stage: string) {
   return new Error(`${stage}失败：${message}`, { cause: error });
 }
 
+function isTemporaryCandidateSearchFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /联网候选搜索暂时不可用|HTTP\s*50[0234]|upstream_error|Upstream request failed|response\.failed|网络请求异常/i.test(message);
+}
+
+function buildCandidateSearchUnavailableStep(error: unknown, language: OutputLanguage): SearchProcessStep {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    title: language === "zh-CN" ? "候选坐标搜索暂时不可用" : "Candidate coordinate search temporarily unavailable",
+    rationale:
+      language === "zh-CN"
+        ? `联网候选搜索上游暂时失败，本次分析保留识别线索、搜索语句和人工核验报告，但不会伪造候选坐标。技术详情：${message}`
+        : `The online candidate search upstream failed temporarily. This analysis keeps the extracted clues, search queries, and manual verification report, but does not fabricate coordinates. Technical detail: ${message}`,
+    status: "planned"
+  };
+}
+
 function buildSearchProcess(
   queries: ReturnType<typeof buildSearchQueries>,
   language: OutputLanguage
 ): SearchProcessStep[] {
   const zh = language === "zh-CN";
-  const purposeLabels: Record<string, { zh: string; en: string }> = {
-    "visual-feature-bundle": {
-      zh: "视觉特征集合",
-      en: "visual feature bundle"
-    },
-    "visual-inferred-term": {
-      zh: "视觉推断词",
-      en: "visual inferred term"
-    },
-    "ocr-visual-context": {
-      zh: "OCR 辅助线索",
-      en: "OCR with visual context"
-    }
-  };
 
   return [
     ...queries.slice(0, 6).map((query, index) => ({
       title: zh ? `步骤 ${index + 1}：生成搜索语句` : `Step ${index + 1}: Build search query`,
       query: query.query,
       rationale: zh
-        ? `根据 ${purposeLabels[query.purpose]?.zh ?? query.purpose} 生成，用于寻找可在地图上核验的候选区域。`
-        : `Generated from ${purposeLabels[query.purpose]?.en ?? query.purpose} to find map-verifiable candidate areas.`,
+        ? `根据 ${searchPurposeLabel(query.purpose, language)} 生成，用于寻找可在地图上核验的候选区域。`
+        : `Generated from ${searchPurposeLabel(query.purpose, language)} to find map-verifiable candidate areas.`,
       status: "planned" as const
     })),
     {
@@ -219,7 +224,7 @@ export async function runInvestigation(input: RunInvestigationInput): Promise<In
     ? input.image.evidencePaths
     : [input.image.cropPath ?? input.image.originalPath];
   const imagePath = evidencePaths[0];
-  const extractedClues = await extractCluesFromEvidencePaths({
+  const extractedClues = sanitizeExtractedClues(await extractCluesFromEvidencePaths({
     vision,
     imagePaths: evidencePaths,
     userScope: input.userScope,
@@ -227,7 +232,7 @@ export async function runInvestigation(input: RunInvestigationInput): Promise<In
     visionConfig: input.visionConfig
   }).catch((error) => {
     throw withStageMessage(error, "视觉模型识别");
-  });
+  }));
   const mapFeatureProfile = buildMapFeatureProfile(input.userScope, extractedClues);
   const searchQueries = buildSearchQueries(input.userScope, extractedClues);
   const searchProcess = buildSearchProcess(searchQueries, outputLanguage);
@@ -240,14 +245,20 @@ export async function runInvestigation(input: RunInvestigationInput): Promise<In
     throw withStageMessage(error, "分析摘要生成");
   });
   const seasonalAnalysis = buildSeasonalAnalysis({ userScope: input.userScope, outputLanguage });
-  const searchCandidates = await search.findCandidates({
-    userScope: input.userScope,
-    clues: extractedClues,
-    mapFeatureProfile,
-    queries: searchQueries
-  }).catch((error) => {
-    throw withStageMessage(error, "候选坐标搜索");
-  });
+  let searchCandidates: Investigation["candidates"] = [];
+  try {
+    searchCandidates = await search.findCandidates({
+      userScope: input.userScope,
+      clues: extractedClues,
+      mapFeatureProfile,
+      queries: searchQueries
+    });
+  } catch (error) {
+    if (!isTemporaryCandidateSearchFailure(error)) {
+      throw withStageMessage(error, "候选坐标搜索");
+    }
+    searchProcess.push(buildCandidateSearchUnavailableStep(error, outputLanguage));
+  }
   const candidates = attachOsintLinks([...buildMetadataCandidates(metadataEvidence), ...searchCandidates]);
   const report = buildReports({
     outputLanguage,

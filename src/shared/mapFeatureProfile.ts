@@ -1,50 +1,12 @@
+import { cleanClueText, isSourceOnlyClue, sourceOnlyLabel } from "./clueClassification";
 import type { ExtractedClues, MapFeatureProfile, UserScope } from "./types";
 
 function clean(value: string) {
-  return value.trim().replace(/\s+/g, " ");
+  return cleanClueText(value);
 }
 
 function unique(items: string[]) {
   return [...new Set(items.map(clean).filter(Boolean))];
-}
-
-function mediaSourceLabel(value: string) {
-  const text = clean(value);
-  const lower = text.toLocaleLowerCase();
-
-  const cctvNumber = lower.match(/\bcctv\s*[-]?\s*(\d+)\b/);
-  if (cctvNumber) {
-    return `CCTV ${cctvNumber[1]}`;
-  }
-  if (/\bcctv\.com\b/i.test(text)) {
-    return "CCTV.com";
-  }
-  if (/^cctv$/i.test(text)) {
-    return "CCTV";
-  }
-  if (text.includes("央视")) {
-    return "央视";
-  }
-  if (text.includes("国防军事")) {
-    return "国防军事";
-  }
-
-  return undefined;
-}
-
-function hasMapVerifiableWord(value: string) {
-  return /(building|roof|wall|fence|gate|flower|bed|pole|utility|platform|station|road|track|rail|yard|tower|field|ground|tree|water|river|mountain|shadow|bridge|intersection|runway|hangar|warehouse|parking|courtyard|harbor|port|coast|shore|canal|chimney|smokestack|stadium|sports|solar|greenhouse|slope|ridge|valley|屋顶|围墙|墙|门岗|大门|花坛|电线杆|灯杆|站台|道路|路口|轨道|铁路|建筑|操场|训练场|停车场|仓库|塔|烟囱|桥|机场|跑道|机库|港口|码头|海岸|河道|水体|河|山|山坡|山脊|树林|农田|阴影|朝向)/i.test(
-    value
-  );
-}
-
-function isSourceOnly(value: string) {
-  const media = mediaSourceLabel(value);
-  if (!media) {
-    return false;
-  }
-
-  return !hasMapVerifiableWord(value);
 }
 
 function isViewpoint(value: string) {
@@ -76,19 +38,19 @@ export function buildMapFeatureProfile(scope: UserScope, clues: ExtractedClues):
       if (!item) {
         return [];
       }
-      const label = mediaSourceLabel(item);
+      const label = sourceOnlyLabel(item);
       return label ? [label] : [];
     })
   );
-  const primaryFeatures = unique(clues.sceneFeatures.filter((feature) => !isSourceOnly(feature)).slice(0, 14));
+  const primaryFeatures = unique(clues.sceneFeatures.filter((feature) => !isSourceOnlyClue(feature)).slice(0, 14));
   const spatialRelationships = unique(
-    clues.spatialRelationships.filter((relationship) => !isSourceOnly(relationship)).slice(0, 12)
+    clues.spatialRelationships.filter((relationship) => !isSourceOnlyClue(relationship)).slice(0, 12)
   );
   const viewpointConstraints = unique(spatialRelationships.filter(isViewpoint).slice(0, 8));
   const auxiliaryTextClues = unique(
     [...clues.ocrText, ...clues.visibleLabels]
-      .filter((clue) => !isSourceOnly(clue))
-      .filter((clue) => !mediaSourceLabel(clue))
+      .filter((clue) => !isSourceOnlyClue(clue))
+      .filter((clue) => !sourceOnlyLabel(clue))
       .slice(0, 10)
   );
 

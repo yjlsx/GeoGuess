@@ -57,7 +57,6 @@ body {
 }
 
 .header-nav-item,
-.user-chip,
 button,
 a {
   transition:
@@ -91,34 +90,14 @@ textarea:focus-visible {
 .field-checklist,
 .evidence-card,
 .candidate,
-.candidate-table-wrap,
 .trace-strip,
 .map-preview,
 .earth-screenshot-slot,
-.earth-preview,
-.report-export-bar {
+.earth-preview {
   border-color: var(--geo-border) !important;
   background: linear-gradient(180deg, rgba(20, 32, 52, 0.94), rgba(12, 19, 34, 0.92)) !important;
   box-shadow: var(--geo-glow);
   backdrop-filter: blur(14px);
-}
-
-.report-export-bar {
-  position: sticky;
-  top: 62px;
-  z-index: 35;
-  border: 1px solid var(--geo-border);
-  border-radius: 12px;
-  padding: 10px 12px;
-}
-
-.report-export-bar::before {
-  content: "报告操作";
-  margin-right: 6px;
-  color: var(--geo-muted);
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
 }
 
 .workbench-status-bar {
@@ -175,8 +154,7 @@ textarea:focus-visible {
 .inline-action,
 .icon-button,
 .trace-query-card button,
-.trace-query-card a,
-.nav-popover button {
+.trace-query-card a {
   border-radius: 9px !important;
   border-color: rgba(125, 211, 252, 0.2) !important;
   background: rgba(15, 23, 42, 0.74) !important;
@@ -189,8 +167,7 @@ textarea:focus-visible {
 .inline-action:hover,
 .icon-button:hover,
 .trace-query-card button:hover,
-.trace-query-card a:hover,
-.nav-popover button:hover {
+.trace-query-card a:hover {
   border-color: rgba(45, 212, 191, 0.48) !important;
   background: rgba(20, 184, 166, 0.12) !important;
   box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.08);
@@ -225,7 +202,6 @@ textarea:focus-visible {
 
 .card-title-row h3,
 .analysis-card-heading h3,
-.candidate-workbench h3,
 .map-verification-section h3,
 .trace-strip-heading h3 {
   letter-spacing: 0.01em;
@@ -312,48 +288,19 @@ textarea:focus-visible {
   background: rgba(20, 184, 166, 0.13) !important;
 }
 
-.candidate-table-wrap {
-  border-radius: 12px;
-}
-
-.candidate-comparison-table thead th {
-  background: rgba(10, 18, 32, 0.96) !important;
-  color: #b6c7df !important;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.candidate-comparison-table tbody tr {
-  transition: background 140ms ease, box-shadow 140ms ease;
-}
-
-.candidate-comparison-table tbody tr:hover {
-  background: rgba(34, 211, 238, 0.08) !important;
-}
-
-.candidate-comparison-table tbody tr.selected-candidate-row {
-  background: rgba(20, 184, 166, 0.13) !important;
-  box-shadow: inset 4px 0 0 var(--geo-teal), inset 0 0 0 1px rgba(45, 212, 191, 0.16) !important;
-}
-
-.review-status,
-.consistency-badge,
 .candidate-badges > span,
 .workbench-count {
   border: 1px solid rgba(148, 163, 184, 0.12);
 }
 
-.review-status-confirmed,
 .consistency-good {
   border-color: rgba(45, 212, 191, 0.25);
 }
 
-.review-status-excluded,
 .consistency-bad {
   border-color: rgba(251, 113, 133, 0.25);
 }
 
-.review-status-keep,
 .consistency-warn,
 .threshold-review-note {
   border-color: rgba(251, 191, 36, 0.28) !important;
@@ -389,7 +336,6 @@ textarea:focus-visible {
   border-radius: 10px;
 }
 
-.nav-popover,
 .settings-popover .config-panel {
   border-radius: 12px !important;
 }
@@ -419,27 +365,12 @@ textarea:focus-visible {
   }
 
   .summary-board,
-  .primary-verification-grid,
-  .candidate-workbench {
+  .primary-verification-grid {
     gap: 10px;
-  }
-
-  .candidate-comparison-table th,
-  .candidate-comparison-table td {
-    border-bottom-color: rgba(125, 211, 252, 0.1) !important;
   }
 }
 
 @media (max-width: 1099px) {
-  .report-export-bar {
-    position: static;
-    border-radius: 10px;
-  }
-
-  .report-export-bar::before {
-    flex-basis: 100%;
-  }
-
   .panel,
   .analysis-action-panel,
   .best-candidate-card,
@@ -447,7 +378,6 @@ textarea:focus-visible {
   .field-checklist,
   .evidence-card,
   .candidate,
-  .candidate-table-wrap,
   .trace-strip,
   .map-preview,
   .earth-screenshot-slot,
@@ -459,15 +389,6 @@ textarea:focus-visible {
 @media (max-width: 720px) {
   .app-header {
     backdrop-filter: blur(14px);
-  }
-
-  .report-export-bar {
-    display: grid !important;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .report-export-bar .save-status {
-    grid-column: 1 / -1;
   }
 
   .secondary-button,

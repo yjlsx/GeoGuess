@@ -54,8 +54,7 @@ const bodySchema = z.object({
       model: z.string().min(1).optional(),
       matchingThreshold: z.number().min(0).max(1).optional(),
       maxCandidates: z.number().int().min(1).max(50).optional(),
-      coordinateSystem: z.enum(["WGS84 (EPSG:4326)", "GCJ-02", "BD-09"]).optional(),
-      terrainValidation: z.boolean().optional()
+      coordinateSystem: z.enum(["WGS84 (EPSG:4326)", "GCJ-02", "BD-09"]).optional()
     })
     .optional(),
   manualClues: z

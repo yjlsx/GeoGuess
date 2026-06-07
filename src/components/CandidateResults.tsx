@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
-import type { Investigation } from "../shared/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CandidateManualVerdict, FeatureMatch, Investigation } from "../shared/types";
 import { formatCoordinate } from "../shared/mapLinks";
+
+type Candidate = Investigation["candidates"][number];
+type FeatureMatchStatus = NonNullable<Candidate["featureMatches"]>[number]["status"];
+type CandidateManualVerdictStatus = CandidateManualVerdict["status"];
 
 type Props = {
   assetMediaType?: string | null;
   assetName?: string | null;
   assetPreviewUrl?: string | null;
-  exportStatus?: string | null;
   investigation: Investigation | null;
   loading: boolean;
   error: string | null;
@@ -15,44 +18,39 @@ type Props = {
   analysisProgress?: number;
   analysisStartedAt?: number | null;
   analysisFinishedAt?: number | null;
+  showLowConfidenceCandidates?: boolean;
+  maxLowConfidenceCandidates?: number;
   matchingThreshold?: number;
   modelName?: string | null;
   now?: number;
-  onCopyReport?: () => void;
-  onDownloadHtml?: () => void;
-  onDownloadMarkdown?: () => void;
-  onPrintReport?: () => void;
-  onShowSample?: () => void;
+  onFeatureMatchStatusChange?: (candidateId: string, featureMatchIndex: number, status: FeatureMatchStatus) => void;
+  onFeatureMatchAdd?: (candidateId: string, featureMatch: FeatureMatch) => void;
+  onCandidateVerdictChange?: (candidateId: string, status: CandidateManualVerdictStatus, rationale: string) => void;
 };
 
-type Candidate = Investigation["candidates"][number];
-type CandidateReviewStatus = "pending" | "keep" | "excluded" | "confirmed";
 type EvidenceTab = "canvas" | "ocr" | "visual" | "metadata" | "reasoning" | "map";
-type CandidateFilterMode = "all" | "high" | "above-threshold" | "pending" | "keep" | "confirmed" | "excluded";
+type MapEvidenceTab = "distribution" | "satellite";
+type CandidateFilterMode = "all" | "high" | "above-threshold";
+type CanvasClueMarker = {
+  label: string;
+  markerTitle: string;
+  style: { left: string; top: string };
+};
 type ProcessStep = {
   title: string;
   detail: string;
   status?: "done" | "active" | "pending";
 };
 
-const reviewStatusLabels: Record<CandidateReviewStatus, string> = {
-  pending: "待核验",
-  keep: "已保留",
-  excluded: "已排除",
-  confirmed: "人工已确认"
-};
-
 const candidateFilterLabels: Record<CandidateFilterMode, string> = {
   all: "全部候选",
   high: "高置信",
-  "above-threshold": "高于阈值",
-  pending: "待核验",
-  keep: "已保留",
-  confirmed: "已确认",
-  excluded: "已排除"
+  "above-threshold": "高于阈值"
 };
 
-const candidateFilterModes: CandidateFilterMode[] = ["all", "high", "above-threshold", "pending", "keep", "confirmed", "excluded"];
+const candidateFilterModes: CandidateFilterMode[] = ["all", "high", "above-threshold"];
+const featureMatchStatuses: FeatureMatchStatus[] = ["matched", "partial", "unverified", "mismatch"];
+const candidateVerdictStatuses: CandidateManualVerdictStatus[] = ["confirmed", "kept", "excluded"];
 
 function buildLoadingAnalysisSteps(progress: number) {
   const stages = [
@@ -119,11 +117,96 @@ function confidenceLabel(confidence: Investigation["candidates"][number]["confid
   return labels[confidence] ?? confidence;
 }
 
+function candidateVerdictLabel(status: CandidateManualVerdictStatus | undefined) {
+  if (status === "confirmed") {
+    return "已确认";
+  }
+  if (status === "kept") {
+    return "保留核验";
+  }
+  if (status === "excluded") {
+    return "已排除";
+  }
+  return "未人工判定";
+}
+
+function candidateVerdictActionLabel(status: CandidateManualVerdictStatus) {
+  if (status === "confirmed") {
+    return "确认候选";
+  }
+  if (status === "kept") {
+    return "保留候选";
+  }
+  if (status === "excluded") {
+    return "排除候选";
+  }
+  return "重置候选";
+}
+
 function candidateScoreLabel(candidate: Candidate | null | undefined) {
   if (!candidate) {
     return "--";
   }
   return typeof candidate.matchScore === "number" ? `${candidate.matchScore.toFixed(1)}%` : confidenceLabel(candidate.confidence);
+}
+
+function CandidateVerdictPanel({
+  candidate,
+  onChange
+}: {
+  candidate: Candidate;
+  onChange?: (status: CandidateManualVerdictStatus, rationale: string) => void;
+}) {
+  const draftRationaleRef = useRef(candidate.manualVerdict?.rationale ?? "");
+  const draftRationaleInputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const nextRationale = candidate.manualVerdict?.rationale ?? "";
+    draftRationaleRef.current = nextRationale;
+    if (draftRationaleInputRef.current) {
+      draftRationaleInputRef.current.value = nextRationale;
+    }
+  }, [candidate.id, candidate.manualVerdict?.rationale]);
+
+  const currentStatus = candidate.manualVerdict?.status ?? "unreviewed";
+  const updateDraftRationale = (nextRationale: string) => {
+    draftRationaleRef.current = nextRationale;
+  };
+
+  return (
+    <section className="rail-card candidate-verdict-card" aria-label="当前候选人工结论">
+      <div className="rail-card-heading compact">
+        <h3>人工结论</h3>
+        <span>{candidateVerdictLabel(currentStatus)}</span>
+      </div>
+      <strong className={`candidate-verdict-status verdict-${currentStatus}`}>人工结论：{candidateVerdictLabel(currentStatus)}</strong>
+      <label className="field candidate-verdict-rationale">
+        人工结论理由
+        <textarea
+          aria-label="人工结论理由"
+          ref={draftRationaleInputRef}
+          defaultValue={candidate.manualVerdict?.rationale ?? ""}
+          onChange={(event) => updateDraftRationale(event.target.value)}
+          onInput={(event) => updateDraftRationale(event.currentTarget.value)}
+          placeholder="记录确认、保留或排除的地图/Earth 对照依据"
+        />
+      </label>
+      <div className="candidate-verdict-actions">
+        {candidateVerdictStatuses.map((status) => (
+          <button
+            aria-pressed={currentStatus === status}
+            className={currentStatus === status ? "small-button active" : "small-button"}
+            key={status}
+            type="button"
+            onClick={() => onChange?.(status, draftRationaleInputRef.current?.value || draftRationaleRef.current)}
+          >
+            {candidateVerdictActionLabel(status)}
+          </button>
+        ))}
+      </div>
+      {candidate.manualVerdict?.rationale ? <p>{candidate.manualVerdict.rationale}</p> : null}
+    </section>
+  );
 }
 
 function candidateScoreWidth(candidate: Candidate) {
@@ -156,12 +239,7 @@ function formatElapsed(startedAt: number | null | undefined, finishedAt: number 
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function candidateMatchesFilter(
-  candidate: Candidate,
-  filterMode: CandidateFilterMode,
-  reviewStatus: CandidateReviewStatus,
-  thresholdScore: number
-) {
+function candidateMatchesFilter(candidate: Candidate, filterMode: CandidateFilterMode, thresholdScore: number) {
   if (filterMode === "all") {
     return true;
   }
@@ -171,10 +249,52 @@ function candidateMatchesFilter(
   if (filterMode === "above-threshold") {
     return typeof candidate.matchScore === "number" ? candidate.matchScore >= thresholdScore : false;
   }
-  return reviewStatus === filterMode;
+  return true;
+}
+
+function applyLowConfidenceDisplaySettings(
+  candidates: Candidate[],
+  showLowConfidenceCandidates: boolean,
+  maxLowConfidenceCandidates: number
+) {
+  if (!showLowConfidenceCandidates) {
+    return candidates.filter((candidate) => candidate.confidence !== "low");
+  }
+
+  const lowLimit = Math.max(0, Math.floor(maxLowConfidenceCandidates));
+  let visibleLowCount = 0;
+  return candidates.filter((candidate) => {
+    if (candidate.confidence !== "low") {
+      return true;
+    }
+    visibleLowCount += 1;
+    return visibleLowCount <= lowLimit;
+  });
+}
+
+function markerPositionForClue(clue: string, fallbackIndex: number) {
+  if (/cctv\.com|央视网/i.test(clue)) {
+    return { left: "91%", top: "7%" };
+  }
+  if (/cctv\s*7|cctv-?7|cctv/i.test(clue)) {
+    return { left: "88%", top: "7%" };
+  }
+  if (/国防军事|国防|军事频道/i.test(clue)) {
+    return { left: "9%", top: "7%" };
+  }
+  if (/军事报道/.test(clue)) {
+    return { left: "13%", top: "76%" };
+  }
+  if (/火箭军|新兵团|袁航|帮助他们|合格军人|地方青年/.test(clue)) {
+    return { left: "48%", top: "72%" };
+  }
+  return clueMarkerPositions[fallbackIndex] ?? clueMarkerPositions[0];
 }
 
 function buildClueChips(investigation: Investigation | null, selectedCandidate: Candidate | undefined) {
+  const prominentVisibleLabels = investigation?.extractedClues.visibleLabels.filter((item) => !/^(CCTV|CGTN|BBC|CNN|NHK)\s*\d*$/i.test(item.trim())) ?? [];
+  const secondaryVisibleLabels = investigation?.extractedClues.visibleLabels.filter((item) => !prominentVisibleLabels.includes(item)) ?? [];
+  const prominentOcrText = [...(investigation?.extractedClues.ocrText ?? [])].sort((left, right) => left.length - right.length);
   const candidateClues = selectedCandidate
     ? [
         ...(selectedCandidate.matchedFeatures ?? []),
@@ -183,6 +303,9 @@ function buildClueChips(investigation: Investigation | null, selectedCandidate: 
     : [];
   const investigationClues = investigation
     ? [
+        ...prominentVisibleLabels,
+        ...prominentOcrText,
+        ...secondaryVisibleLabels,
         ...investigation.extractedClues.ocrText.map((item) => `OCR：${item}`),
         ...investigation.extractedClues.visibleLabels.map((item) => `标识：${item}`),
         ...investigation.extractedClues.sceneFeatures,
@@ -190,7 +313,15 @@ function buildClueChips(investigation: Investigation | null, selectedCandidate: 
       ]
     : [];
 
-  return uniqueItems([...candidateClues, ...investigationClues]).slice(0, 5);
+  return uniqueItems([...investigationClues, ...candidateClues]).slice(0, 5);
+}
+
+function buildCanvasMarkers(clues: string[]): CanvasClueMarker[] {
+  return clues.map((clue, index) => ({
+      label: String(index + 1),
+      markerTitle: clue,
+      style: markerPositionForClue(clue, index)
+    }));
 }
 
 function buildMetadataRows(investigation: Investigation | null, selectedCandidate: Candidate | undefined, assetName: string | null | undefined) {
@@ -223,10 +354,10 @@ function buildColorSwatches(investigation: Investigation | null) {
 }
 
 const clueMarkerPositions = [
-  { left: "36%", top: "28%" },
-  { left: "48%", top: "42%" },
-  { left: "57%", top: "61%" },
-  { left: "18%", top: "58%" },
+  { left: "9%", top: "7%" },
+  { left: "91%", top: "7%" },
+  { left: "13%", top: "76%" },
+  { left: "48%", top: "72%" },
   { left: "78%", top: "55%" }
 ];
 
@@ -244,8 +375,423 @@ function renderList(items: string[], empty = "未提供") {
   );
 }
 
+function featureMatchStatusLabel(status: NonNullable<Candidate["featureMatches"]>[number]["status"]) {
+  if (status === "matched") {
+    return "已匹配";
+  }
+  if (status === "partial") {
+    return "部分匹配";
+  }
+  if (status === "mismatch") {
+    return "不匹配";
+  }
+  return "待核验";
+}
+
+function confidenceTextLabel(confidence: FeatureMatch["aiVerification"] extends infer Verification ? Verification extends { confidence: infer Value } ? Value : never : never) {
+  if (confidence === "high") {
+    return "高置信";
+  }
+  if (confidence === "medium") {
+    return "中置信";
+  }
+  return "低置信";
+}
+
+function aiVerificationStatusLabel(status: NonNullable<FeatureMatch["aiVerification"]>["status"]) {
+  if (status === "supports") {
+    return "支持";
+  }
+  if (status === "contradicts") {
+    return "矛盾";
+  }
+  return "证据不足";
+}
+
+function readEvidenceImageAttachment(file: File): Promise<NonNullable<FeatureMatch["mapScreenshotAttachment"]>> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("无法读取截图附件。"));
+        return;
+      }
+
+      resolve({
+        name: file.name,
+        dataUrl: reader.result,
+        mediaType: file.type || "application/octet-stream"
+      });
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("无法读取截图附件。"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function FeatureMatchBoard({
+  ariaLabel = "证据对照",
+  candidate,
+  onAdd,
+  onStatusChange,
+  variant = "default"
+}: {
+  ariaLabel?: string;
+  candidate: Candidate;
+  onAdd?: (featureMatch: FeatureMatch) => void;
+  onStatusChange?: (featureMatchIndex: number, status: FeatureMatchStatus) => void;
+  variant?: "default" | "rail";
+}) {
+  const featureMatches = candidate.featureMatches ?? [];
+  const [draftImageFeature, setDraftImageFeature] = useState("");
+  const [draftMapFeature, setDraftMapFeature] = useState("");
+  const [draftVerification, setDraftVerification] = useState("");
+  const [draftImageAnnotation, setDraftImageAnnotation] = useState("");
+  const [draftMapAnnotation, setDraftMapAnnotation] = useState("");
+  const [draftEvidenceLink, setDraftEvidenceLink] = useState("");
+  const [draftMapScreenshotUrl, setDraftMapScreenshotUrl] = useState("");
+  const [draftMapScreenshotAttachment, setDraftMapScreenshotAttachment] = useState<FeatureMatch["mapScreenshotAttachment"]>();
+  const [draftEarthImageDate, setDraftEarthImageDate] = useState("");
+  const [draftAiVerificationStatus, setDraftAiVerificationStatus] = useState<NonNullable<FeatureMatch["aiVerification"]>["status"]>("inconclusive");
+  const [draftAiVerificationConfidence, setDraftAiVerificationConfidence] = useState<NonNullable<FeatureMatch["aiVerification"]>["confidence"]>("medium");
+  const [draftAiVerificationRationale, setDraftAiVerificationRationale] = useState("");
+  const [draftAiVerificationModel, setDraftAiVerificationModel] = useState("");
+
+  const boardClassName = variant === "rail" ? "feature-match-board rail-card rail-feature-match-board" : "feature-match-board";
+  const canAddFeatureMatch = Boolean(
+    onAdd &&
+      draftImageFeature.trim() &&
+      draftMapFeature.trim() &&
+      draftVerification.trim()
+  );
+  const addFeatureMatch = () => {
+    if (!canAddFeatureMatch || !onAdd) {
+      return;
+    }
+
+    const imageAnnotation = draftImageAnnotation.trim();
+    const mapAnnotation = draftMapAnnotation.trim();
+    const evidenceLink = draftEvidenceLink.trim();
+    const mapScreenshotUrl = draftMapScreenshotUrl.trim();
+    const earthImageDate = draftEarthImageDate.trim();
+    const aiVerificationRationale = draftAiVerificationRationale.trim();
+    const aiVerificationModel = draftAiVerificationModel.trim();
+    onAdd({
+      imageFeature: draftImageFeature.trim(),
+      mapFeature: draftMapFeature.trim(),
+      verification: draftVerification.trim(),
+      ...(imageAnnotation ? { imageAnnotation } : {}),
+      ...(mapAnnotation ? { mapAnnotation } : {}),
+      ...(evidenceLink ? { evidenceLink } : {}),
+      ...(mapScreenshotUrl ? { mapScreenshotUrl } : {}),
+      ...(draftMapScreenshotAttachment ? { mapScreenshotAttachment: draftMapScreenshotAttachment } : {}),
+      ...(earthImageDate ? { earthImageDate } : {}),
+      ...(aiVerificationRationale
+        ? {
+            aiVerification: {
+              status: draftAiVerificationStatus,
+              confidence: draftAiVerificationConfidence,
+              rationale: aiVerificationRationale,
+              ...(aiVerificationModel ? { model: aiVerificationModel } : {})
+            }
+          }
+        : {}),
+      status: "unverified"
+    });
+    setDraftImageFeature("");
+    setDraftMapFeature("");
+    setDraftVerification("");
+    setDraftImageAnnotation("");
+    setDraftMapAnnotation("");
+    setDraftEvidenceLink("");
+    setDraftMapScreenshotUrl("");
+    setDraftMapScreenshotAttachment(undefined);
+    setDraftEarthImageDate("");
+    setDraftAiVerificationStatus("inconclusive");
+    setDraftAiVerificationConfidence("medium");
+    setDraftAiVerificationRationale("");
+    setDraftAiVerificationModel("");
+  };
+  const handleMapScreenshotAttachmentChange = async (file: File | undefined) => {
+    if (!file) {
+      setDraftMapScreenshotAttachment(undefined);
+      return;
+    }
+
+    setDraftMapScreenshotAttachment(await readEvidenceImageAttachment(file));
+  };
+
+  return (
+    <section className={boardClassName} aria-label={ariaLabel}>
+      <div className="feature-match-heading">
+        <h4>证据对照</h4>
+        <span>{featureMatches.length} 项</span>
+      </div>
+      {featureMatches.length > 0 ? (
+        <div className="feature-match-list">
+          {featureMatches.map((match, index) => (
+            <article
+              aria-label={`证据对应 ${index + 1}`}
+              className={`feature-match-item match-${match.status}`}
+              key={`${match.imageFeature}-${match.mapFeature}-${index}`}
+            >
+              <span className="feature-match-index">{index + 1}</span>
+              <div>
+                <strong>原图特征</strong>
+                <p>{match.imageFeature}</p>
+              </div>
+              <div>
+                <strong>地图 / Earth 对应</strong>
+                <p>{match.mapFeature}</p>
+              </div>
+              <div>
+                <strong>{featureMatchStatusLabel(match.status)}</strong>
+                <p>{match.verification}</p>
+                {match.imageAnnotation || match.mapAnnotation || match.evidenceLink || match.mapScreenshotUrl || match.earthImageDate || match.aiVerification ? (
+                  <dl className="feature-match-source-details" aria-label={`证据对应 ${index + 1} 来源详情`}>
+                    {match.imageAnnotation ? (
+                      <>
+                        <dt>原图标注说明</dt>
+                        <dd>{match.imageAnnotation}</dd>
+                      </>
+                    ) : null}
+                    {match.mapAnnotation ? (
+                      <>
+                        <dt>地图/Earth 标注说明</dt>
+                        <dd>{match.mapAnnotation}</dd>
+                      </>
+                    ) : null}
+                    {match.evidenceLink ? (
+                      <>
+                        <dt>核验链接</dt>
+                        <dd>{match.evidenceLink}</dd>
+                      </>
+                    ) : null}
+                    {match.mapScreenshotUrl ? (
+                      <>
+                        <dt>地图/Earth 截图</dt>
+                        <dd>{match.mapScreenshotUrl}</dd>
+                      </>
+                    ) : null}
+                    {match.mapScreenshotAttachment ? (
+                      <>
+                        <dt>地图/Earth 截图附件</dt>
+                        <dd>{match.mapScreenshotAttachment.name}</dd>
+                      </>
+                    ) : null}
+                    {match.earthImageDate ? (
+                      <>
+                        <dt>地图/Earth 影像日期</dt>
+                        <dd>{match.earthImageDate}</dd>
+                      </>
+                    ) : null}
+                    {match.aiVerification ? (
+                      <>
+                        <dt>AI 核验</dt>
+                        <dd>AI 核验：{aiVerificationStatusLabel(match.aiVerification.status)}</dd>
+                        <dt>置信度</dt>
+                        <dd>置信度：{confidenceTextLabel(match.aiVerification.confidence)}</dd>
+                        <dt>AI 核验理由</dt>
+                        <dd>{match.aiVerification.rationale}</dd>
+                        {match.aiVerification.model ? (
+                          <>
+                            <dt>AI 核验模型</dt>
+                            <dd>{match.aiVerification.model}</dd>
+                          </>
+                        ) : null}
+                        {match.aiVerification.checkedAt ? (
+                          <>
+                            <dt>AI 核验时间</dt>
+                            <dd>{match.aiVerification.checkedAt}</dd>
+                          </>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </dl>
+                ) : null}
+                {match.mapScreenshotAttachment ? (
+                  <figure className="feature-match-screenshot-preview">
+                    <img src={match.mapScreenshotAttachment.dataUrl} alt={`证据对应 ${index + 1} 地图/Earth 截图附件`} />
+                    <figcaption>{match.mapScreenshotAttachment.name}</figcaption>
+                  </figure>
+                ) : null}
+                {onStatusChange ? (
+                  <div className="feature-match-status-controls" aria-label={`证据对应 ${index + 1} 人工标记`}>
+                    {featureMatchStatuses.map((status) => (
+                      <button
+                        aria-pressed={match.status === status}
+                        className={match.status === status ? "active" : ""}
+                        key={status}
+                        type="button"
+                        onClick={() => onStatusChange(index, status)}
+                      >
+                        标记为{featureMatchStatusLabel(status)}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="muted">尚未记录原图与地图/Earth 的对应关系。</p>
+      )}
+      {onAdd ? (
+        <div className="feature-match-add-form" aria-label="新增证据对应">
+          <label>
+            新增原图特征
+            <input
+              aria-label="新增原图特征"
+              value={draftImageFeature}
+              onChange={(event) => setDraftImageFeature(event.target.value)}
+              placeholder="例如：原图左侧蓝色屋顶贴近弯道"
+            />
+          </label>
+          <label>
+            新增地图或 Earth 对应
+            <input
+              aria-label="新增地图或 Earth 对应"
+              value={draftMapFeature}
+              onChange={(event) => setDraftMapFeature(event.target.value)}
+              placeholder="例如：Earth 中候选点西北角蓝屋顶"
+            />
+          </label>
+          <label>
+            新增核验依据
+            <textarea
+              aria-label="新增核验依据"
+              value={draftVerification}
+              onChange={(event) => setDraftVerification(event.target.value)}
+              placeholder="记录在 Maps/Earth 中需要对照的线条、圈选或截图说明"
+            />
+          </label>
+          <label>
+            原图标注说明
+            <input
+              aria-label="原图标注说明"
+              value={draftImageAnnotation}
+              onChange={(event) => setDraftImageAnnotation(event.target.value)}
+              placeholder="例如：红圈圈住屋顶，蓝线沿入口道路"
+            />
+          </label>
+          <label>
+            地图/Earth 标注说明
+            <input
+              aria-label="地图/Earth 标注说明"
+              value={draftMapAnnotation}
+              onChange={(event) => setDraftMapAnnotation(event.target.value)}
+              placeholder="例如：Earth 截图红圈圈住同一屋顶"
+            />
+          </label>
+          <label>
+            核验链接（Google Maps/Earth）
+            <input
+              aria-label="核验链接（Google Maps/Earth）"
+              value={draftEvidenceLink}
+              onChange={(event) => setDraftEvidenceLink(event.target.value)}
+              placeholder="粘贴 Google Maps/Earth、OSM 或其它可复核链接"
+            />
+          </label>
+          <label>
+            地图/Earth 截图或来源
+            <input
+              aria-label="地图/Earth 截图或来源"
+              value={draftMapScreenshotUrl}
+              onChange={(event) => setDraftMapScreenshotUrl(event.target.value)}
+              placeholder="例如：earth-candidate-1-2024-04.png"
+            />
+          </label>
+          <label>
+            地图/Earth 截图附件
+            <input
+              aria-label="地图/Earth 截图附件"
+              accept="image/*"
+              type="file"
+              onChange={(event) => void handleMapScreenshotAttachmentChange(event.target.files?.[0])}
+            />
+          </label>
+          {draftMapScreenshotAttachment ? (
+            <figure className="feature-match-screenshot-preview draft">
+              <img src={draftMapScreenshotAttachment.dataUrl} alt="待添加地图/Earth 截图附件" />
+              <figcaption>{draftMapScreenshotAttachment.name}</figcaption>
+            </figure>
+          ) : null}
+          <label>
+            地图/Earth 影像日期
+            <input
+              aria-label="地图/Earth 影像日期"
+              value={draftEarthImageDate}
+              onChange={(event) => setDraftEarthImageDate(event.target.value)}
+              placeholder="例如：2024-04、2023-10-18 或历史影像未知"
+            />
+          </label>
+          <div className="feature-match-ai-fields" aria-label="AI 核验证据">
+            <label>
+              AI 核验结论
+              <select
+                aria-label="AI 核验结论"
+                value={draftAiVerificationStatus}
+                onChange={(event) => setDraftAiVerificationStatus(event.target.value as NonNullable<FeatureMatch["aiVerification"]>["status"])}
+              >
+                <option value="supports">支持</option>
+                <option value="contradicts">矛盾</option>
+                <option value="inconclusive">证据不足</option>
+              </select>
+            </label>
+            <label>
+              AI 核验置信度
+              <select
+                aria-label="AI 核验置信度"
+                value={draftAiVerificationConfidence}
+                onChange={(event) => setDraftAiVerificationConfidence(event.target.value as NonNullable<FeatureMatch["aiVerification"]>["confidence"])}
+              >
+                <option value="high">高置信</option>
+                <option value="medium">中置信</option>
+                <option value="low">低置信</option>
+              </select>
+            </label>
+            <label>
+              AI 核验理由
+              <textarea
+                aria-label="AI 核验理由"
+                value={draftAiVerificationRationale}
+                onChange={(event) => setDraftAiVerificationRationale(event.target.value)}
+                placeholder="模型对原图特征与地图/Earth 对应关系的判断理由"
+              />
+            </label>
+            <label>
+              AI 核验模型
+              <input
+                aria-label="AI 核验模型"
+                value={draftAiVerificationModel}
+                onChange={(event) => setDraftAiVerificationModel(event.target.value)}
+                placeholder="例如：geo-vision-v2"
+              />
+            </label>
+          </div>
+          <button className="small-button" type="button" disabled={!canAddFeatureMatch} onClick={addFeatureMatch}>
+            添加证据对应
+          </button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function countSummary(count: number, unit: string) {
   return `${count} ${unit}`;
+}
+
+function compactErrorMessage(error: string) {
+  if (/联网候选搜索暂时不可用|HTTP\s*50[0234]|upstream_error|Upstream request failed/i.test(error)) {
+    return {
+      title: "候选坐标搜索暂时不可用",
+      detail:
+        "模型服务或 Base URL 上游返回错误，系统已保留可用线索但没有拿到候选坐标。候选搜索需要支持 Responses API 和 web_search_preview；可稍后重试，或在右上角设置里切换到支持联网搜索的模型/Base URL。",
+      raw: error
+    };
+  }
+  return null;
 }
 
 function distanceInKm(left: Candidate, right: Candidate) {
@@ -268,24 +814,6 @@ function formatDistanceFromBest(candidate: Candidate, bestCandidate: Candidate |
 
   const distanceKm = distanceInKm(candidate, bestCandidate);
   return distanceKm < 1 ? `${Math.round(distanceKm * 1000)} m` : `${distanceKm.toFixed(2)} km`;
-}
-
-function consistencyFromCandidate(candidate: Candidate, axis: "direction" | "terrain") {
-  const combined = [
-    ...(candidate.matchedFeatures ?? []),
-    ...(candidate.missingOrUnverifiedFeatures ?? []),
-    ...(candidate.viewpointNotes ?? [])
-  ].join(" ");
-  const score = candidate.matchScore ?? 0;
-
-  if (/不匹配|排除|相反|conflict/i.test(combined) || score < 35) {
-    return { label: "不一致", tone: "bad" };
-  }
-  if (/待核验|部分|遮挡|uncertain|hidden/i.test(combined) || (axis === "terrain" && score < 65)) {
-    return { label: "部分一致", tone: "warn" };
-  }
-
-  return { label: "一致", tone: "good" };
 }
 
 function checklistTone(item: string, index: number) {
@@ -395,14 +923,19 @@ function CandidateDistributionMap({
   onSelectCandidate: (candidateId: string) => void;
   getCandidateLabel: (candidate: Candidate) => string;
 }) {
+  const mapRef = useRef<HTMLDivElement>(null);
   const map = useMemo(() => buildDistributionMap(candidates), [candidates]);
 
   if (!map) {
     return <div className="map-placeholder">无候选坐标</div>;
   }
 
+  function expandMap() {
+    void mapRef.current?.requestFullscreen?.();
+  }
+
   return (
-    <div className="candidate-distribution-map" aria-label={ariaLabel} role="group">
+    <div className="candidate-distribution-map" aria-label={ariaLabel} ref={mapRef} role="group">
       <div className="distribution-map-tiles" aria-hidden="true">
         {map.tiles.map((tile) => (
           <img
@@ -434,6 +967,9 @@ function CandidateDistributionMap({
         );
       })}
       <span className="distribution-map-attribution">OpenStreetMap</span>
+      <button className="map-corner-expand" type="button" onClick={expandMap} aria-label="全屏查看候选分布" title="全屏查看候选分布">
+        <span aria-hidden="true" />
+      </button>
     </div>
   );
 }
@@ -539,7 +1075,6 @@ export function CandidateResults({
   assetMediaType = null,
   assetName = null,
   assetPreviewUrl = null,
-  exportStatus = null,
   investigation,
   loading,
   error,
@@ -548,21 +1083,29 @@ export function CandidateResults({
   analysisProgress = 0,
   analysisStartedAt = null,
   analysisFinishedAt = null,
+  showLowConfidenceCandidates = true,
+  maxLowConfidenceCandidates = 10,
   matchingThreshold = 0.6,
   modelName = null,
   now = Date.now(),
-  onCopyReport,
-  onDownloadHtml,
-  onDownloadMarkdown,
-  onPrintReport,
-  onShowSample
+  onFeatureMatchStatusChange,
+  onFeatureMatchAdd,
+  onCandidateVerdictChange
 }: Props) {
   const [copiedCandidateId, setCopiedCandidateId] = useState<string | null>(null);
-  const [candidateReviewStatus, setCandidateReviewStatus] = useState<Record<string, CandidateReviewStatus>>({});
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
   const [activeEvidenceTab, setActiveEvidenceTab] = useState<EvidenceTab>("canvas");
+  const [activeMapEvidenceTab, setActiveMapEvidenceTab] = useState<MapEvidenceTab>("distribution");
   const [filterOpen, setFilterOpen] = useState(false);
   const [candidateFilterMode, setCandidateFilterMode] = useState<CandidateFilterMode>("all");
+  const [mediaZoom, setMediaZoom] = useState(1);
+  const [mediaFit, setMediaFit] = useState<"cover" | "contain">("cover");
+  const [mediaEnhanced, setMediaEnhanced] = useState(false);
+
+  const openMapEvidenceTab = (mapTab: MapEvidenceTab = "distribution") => {
+    setActiveEvidenceTab("map");
+    setActiveMapEvidenceTab(mapTab);
+  };
 
   const sortedCandidates = useMemo(() => {
     return [...(investigation?.candidates ?? [])].sort((left, right) => {
@@ -579,23 +1122,23 @@ export function CandidateResults({
 
   const clampedProgress = Math.max(0, Math.min(100, analysisProgress));
   const thresholdScore = Math.round(matchingThreshold * 100);
+  const visibleCandidates = useMemo(
+    () => applyLowConfidenceDisplaySettings(sortedCandidates, showLowConfidenceCandidates, maxLowConfidenceCandidates),
+    [maxLowConfidenceCandidates, showLowConfidenceCandidates, sortedCandidates]
+  );
+  const hiddenLowConfidenceCount = sortedCandidates.length - visibleCandidates.length;
   const filteredCandidates = useMemo(() => {
-    return sortedCandidates.filter((candidate) =>
-      candidateMatchesFilter(candidate, candidateFilterMode, candidateReviewStatus[candidate.id] ?? "pending", thresholdScore)
-    );
-  }, [candidateFilterMode, candidateReviewStatus, sortedCandidates, thresholdScore]);
+    return visibleCandidates.filter((candidate) => candidateMatchesFilter(candidate, candidateFilterMode, thresholdScore));
+  }, [candidateFilterMode, thresholdScore, visibleCandidates]);
   const candidateFilterCounts = useMemo(() => {
     return candidateFilterModes.reduce((counts, filterMode) => {
-      counts[filterMode] = sortedCandidates.filter((candidate) =>
-        candidateMatchesFilter(candidate, filterMode, candidateReviewStatus[candidate.id] ?? "pending", thresholdScore)
-      ).length;
+      counts[filterMode] = visibleCandidates.filter((candidate) => candidateMatchesFilter(candidate, filterMode, thresholdScore)).length;
       return counts;
     }, {} as Record<CandidateFilterMode, number>);
-  }, [candidateReviewStatus, sortedCandidates, thresholdScore]);
+  }, [thresholdScore, visibleCandidates]);
 
   useEffect(() => {
     setCopiedCandidateId(null);
-    setCandidateReviewStatus({});
     setSelectedCandidateId(null);
     setCandidateFilterMode("all");
     setFilterOpen(false);
@@ -615,26 +1158,42 @@ export function CandidateResults({
     });
   }, [filteredCandidates, investigation?.id]);
 
+  useEffect(() => {
+    setMediaZoom(1);
+    setMediaFit("cover");
+    setMediaEnhanced(false);
+  }, [assetPreviewUrl]);
+
   async function copyCoordinate(candidate: Candidate) {
     const coordinate = formatCoordinate(candidate.latitude, candidate.longitude);
     await navigator.clipboard?.writeText(coordinate);
     setCopiedCandidateId(candidate.id);
   }
 
+  function candidateCoordinate(candidate: Candidate) {
+    return formatCoordinate(candidate.latitude, candidate.longitude);
+  }
+
   function candidateLabel(candidate: Candidate) {
-    return candidate.name ?? formatCoordinate(candidate.latitude, candidate.longitude);
+    return candidate.name ?? candidateCoordinate(candidate);
   }
 
-  function setReviewStatus(candidateId: string, status: CandidateReviewStatus) {
-    setCandidateReviewStatus((current) => ({ ...current, [candidateId]: status }));
+  function candidateSecondaryLabel(candidate: Candidate) {
+    return candidate.name ? candidateCoordinate(candidate) : "未命名候选点";
   }
 
-  const bestCandidate = filteredCandidates[0] ?? sortedCandidates[0];
+  function candidateRankingLabel(candidate: Candidate, displayRank: number) {
+    const verdictStatus = candidate.manualVerdict?.status;
+    const verdictSuffix = verdictStatus && verdictStatus !== "unreviewed" ? ` ${candidateVerdictLabel(verdictStatus)}` : "";
+    return `查看候选 ${displayRank} ${candidateLabel(candidate)}${verdictSuffix}`;
+  }
+
+  const bestCandidate = filteredCandidates[0] ?? visibleCandidates[0];
   const selectedCandidate = filteredCandidates.find((candidate) => candidate.id === selectedCandidateId) ?? filteredCandidates[0];
-  const selectedCandidateIndex = selectedCandidate ? sortedCandidates.findIndex((candidate) => candidate.id === selectedCandidate.id) : -1;
+  const selectedCandidateIndex = selectedCandidate ? visibleCandidates.findIndex((candidate) => candidate.id === selectedCandidate.id) : -1;
   const selectedFilterLabel = candidateFilterLabels[candidateFilterMode];
-  const candidateFilterSummary = candidateFilterMode === "all" ? `${sortedCandidates.length} 个候选` : `${filteredCandidates.length}/${sortedCandidates.length} 个候选`;
-  const belowThresholdCount = sortedCandidates.filter((candidate) => typeof candidate.matchScore === "number" && candidate.matchScore < thresholdScore).length;
+  const candidateFilterSummary = candidateFilterMode === "all" ? `${visibleCandidates.length} 个候选` : `${filteredCandidates.length}/${visibleCandidates.length} 个候选`;
+  const belowThresholdCount = visibleCandidates.filter((candidate) => typeof candidate.matchScore === "number" && candidate.matchScore < thresholdScore).length;
   const analysisStatus = error
     ? "分析失败"
     : loading
@@ -684,8 +1243,20 @@ export function CandidateResults({
       ].slice(0, 8)
     : [];
   const canvasClues = buildClueChips(investigation, selectedCandidate);
+  const canvasMarkers = buildCanvasMarkers(canvasClues);
   const metadataRows = buildMetadataRows(investigation, selectedCandidate, assetName);
   const colorSwatches = buildColorSwatches(investigation);
+  const compactError = error ? compactErrorMessage(error) : null;
+  const candidateSearchUnavailableStep = investigation?.searchProcess.find((step) => /候选坐标搜索暂时不可用|Candidate coordinate search temporarily unavailable/i.test(step.title));
+  const candidateSearchUnavailableDetail = candidateSearchUnavailableStep?.rationale;
+  const noCandidateReason = candidateSearchUnavailableDetail
+    ? "候选搜索上游暂时不可用；本次分析已保留识别线索、搜索语句和人工核验报告，但不会伪造候选坐标。"
+    : "模型没有返回可核验候选坐标；可补充来源、地区、字幕或更多连续截图后重试。";
+  const mediaStyle = {
+    objectFit: mediaFit,
+    transform: `scale(${mediaZoom})`,
+    filter: mediaEnhanced ? "brightness(1.18) contrast(1.08) saturate(1.08)" : "none"
+  };
 
   const waitingAnalysisSteps = [
     {
@@ -727,18 +1298,31 @@ export function CandidateResults({
           detail: investigation.mapFeatureProfile.searchInstruction || "没有足够物理特征生成地图核验集合。"
         },
         {
-          title: "候选坐标生成完成",
+          title: candidateSearchUnavailableStep?.title ?? "候选坐标生成完成",
           detail:
-            sortedCandidates.length > 0
-              ? `生成 ${countSummary(sortedCandidates.length, "个候选坐标")}，包含低置信人工复核线索；高级详情中保留候选对比、地图入口和报告。`
-              : "未生成候选坐标；模型返回为空，或候选缺少坐标。可补充来源、地区、字幕或更多连续截图后重试。"
+            visibleCandidates.length > 0
+              ? `展示 ${countSummary(visibleCandidates.length, "个候选坐标")}，包含按设置保留的低置信候选；地图预览集中在“地图核验”标签，高级详情保留候选对比、证据链和报告。`
+              : candidateSearchUnavailableDetail ?? "未生成候选坐标；模型返回为空，或候选缺少坐标。可补充来源、地区、字幕或更多连续截图后重试。"
         }
       ]
     : waitingAnalysisSteps;
 
   return (
     <section className="panel result-panel verification-workbench command-workbench" aria-live="polite" role={loading ? "status" : error ? "alert" : undefined}>
-      {error ? <div className="inline-error">{error}</div> : null}
+      {error ? (
+        compactError ? (
+          <div className="inline-error compact-error">
+            <strong>{compactError.title}</strong>
+            <span>{compactError.detail}</span>
+            <details>
+              <summary>查看技术详情</summary>
+              <p>{compactError.raw}</p>
+            </details>
+          </div>
+        ) : (
+          <div className="inline-error">{error}</div>
+        )
+      ) : null}
       <div className="result-toolbar">
         <div className="result-toolbar-title">
           <p className="eyebrow">核验工作台</p>
@@ -757,13 +1341,18 @@ export function CandidateResults({
             </div>
           ))}
         </div>
-        <span className={sortedCandidates.length > 0 ? "workbench-count ready" : "workbench-count"}>
-          {sortedCandidates.length > 0 ? `${sortedCandidates.length} 个候选` : "暂无候选"}
+        <span className={visibleCandidates.length > 0 ? "workbench-count ready" : "workbench-count"}>
+          {visibleCandidates.length > 0 ? `${visibleCandidates.length} 个候选` : "暂无候选"}
         </span>
       </div>
+      {hiddenLowConfidenceCount > 0 ? (
+        <p className="threshold-review-note">
+          已按设置隐藏 {hiddenLowConfidenceCount} 个低置信候选。
+        </p>
+      ) : null}
       {belowThresholdCount > 0 ? (
         <p className="threshold-review-note">
-          已保留 {belowThresholdCount} 个低于 {thresholdScore} 分阈值的低置信候选，作为人工复核线索展示。
+          显示 {belowThresholdCount} 个低于 {thresholdScore} 分阈值的低置信候选，便于继续地图核验。
         </p>
       ) : null}
       <div className="command-center-board">
@@ -777,51 +1366,88 @@ export function CandidateResults({
               ["reasoning", "AI 推理"],
               ["map", "地图核验"]
             ] satisfies Array<[EvidenceTab, string]>).map(([tab, label]) => (
-              <button className={activeEvidenceTab === tab ? "active" : ""} key={tab} type="button" onClick={() => setActiveEvidenceTab(tab)}>
+              <button
+                className={activeEvidenceTab === tab ? "active" : ""}
+                key={tab}
+                type="button"
+                onClick={() => (tab === "map" ? openMapEvidenceTab("distribution") : setActiveEvidenceTab(tab))}
+              >
                 {label}
               </button>
             ))}
           </div>
-          <div className="evidence-canvas-frame">
+          <div className={activeEvidenceTab === "map" ? "evidence-canvas-frame map-canvas-frame" : "evidence-canvas-frame"}>
             {activeEvidenceTab === "map" ? (
               <div className="evidence-map-tab-view" aria-label="地图核验">
-                <section className="evidence-map-card">
-                  <div className="map-card-heading">
-                    <strong>候选分布</strong>
-                    <span>{candidateFilterSummary}</span>
-                  </div>
-                  <CandidateDistributionMap
-                    ariaLabel="证据画布候选分布地图"
-                    candidates={filteredCandidates}
-                    getCandidateLabel={candidateLabel}
-                    onSelectCandidate={setSelectedCandidateId}
-                    selectedCandidateId={selectedCandidate?.id ?? null}
-                  />
-                </section>
-                <section className="evidence-map-card selected-map-card">
-                  <div className="map-card-heading">
-                    <strong>当前候选卫星图</strong>
-                    {selectedCandidate ? <span>{candidateScoreLabel(selectedCandidate)}</span> : <span>待生成</span>}
-                  </div>
-                  {selectedCandidate ? (
-                    <div className="selected-map-frame">
-                      <iframe
-                        title="证据画布当前候选卫星地图"
-                        src={selectedCandidate.mapPreview.googleMapsEmbedUrl}
-                        loading="lazy"
-                        allow="fullscreen"
-                        allowFullScreen
-                        referrerPolicy="no-referrer-when-downgrade"
-                      />
-                      <div className="selected-map-overlay">
-                        <strong>{formatCoordinate(selectedCandidate.latitude, selectedCandidate.longitude)}</strong>
-                        <span>{selectedCandidate.name ?? "未命名候选点"}</span>
-                      </div>
+                <div className="map-subtabs" role="tablist" aria-label="地图核验视图">
+                  <button
+                    className={activeMapEvidenceTab === "distribution" ? "active" : ""}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeMapEvidenceTab === "distribution"}
+                    onClick={() => setActiveMapEvidenceTab("distribution")}
+                  >
+                    候选分布
+                  </button>
+                  <button
+                    className={activeMapEvidenceTab === "satellite" ? "active" : ""}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeMapEvidenceTab === "satellite"}
+                    onClick={() => setActiveMapEvidenceTab("satellite")}
+                  >
+                    卫星图
+                  </button>
+                </div>
+                {activeMapEvidenceTab === "distribution" ? (
+                  <section className="evidence-map-card map-tab-card" role="tabpanel" aria-label="候选分布">
+                    <div className="map-card-heading">
+                      <strong>候选分布</strong>
+                      <span>{candidateFilterSummary}</span>
                     </div>
-                  ) : (
-                    <div className="map-placeholder">等待候选坐标</div>
-                  )}
-                </section>
+                    <CandidateDistributionMap
+                      ariaLabel="证据画布候选分布地图"
+                      candidates={filteredCandidates}
+                      getCandidateLabel={candidateLabel}
+                      onSelectCandidate={setSelectedCandidateId}
+                      selectedCandidateId={selectedCandidate?.id ?? null}
+                    />
+                  </section>
+                ) : (
+                  <section className="evidence-map-card map-tab-card selected-map-card" role="tabpanel" aria-label="卫星图">
+                    <div className="map-card-heading">
+                      <strong>当前候选卫星图</strong>
+                      {selectedCandidate ? <span>{candidateScoreLabel(selectedCandidate)}</span> : <span>待生成</span>}
+                    </div>
+                    {selectedCandidate ? (
+                      <div className="selected-map-frame">
+                        <iframe
+                          title="证据画布当前候选卫星地图"
+                          src={selectedCandidate.mapPreview.googleMapsEmbedUrl}
+                          loading="lazy"
+                          allowFullScreen
+                          referrerPolicy="no-referrer-when-downgrade"
+                        />
+                        <div className="selected-map-overlay">
+                          <strong>{selectedCandidate.name ?? "未命名候选点"}</strong>
+                          <span>{candidateCoordinate(selectedCandidate)}</span>
+                        </div>
+                        <a
+                          className="map-corner-expand map-corner-link"
+                          href={selectedCandidate.mapLinks.googleMaps}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="在 Google Maps 中打开当前候选"
+                          title="在 Google Maps 中打开当前候选"
+                        >
+                          <span aria-hidden="true" />
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="map-placeholder">等待候选坐标</div>
+                    )}
+                  </section>
+                )}
               </div>
             ) : activeEvidenceTab === "ocr" ? (
               <div className="evidence-tab-panel">
@@ -869,10 +1495,10 @@ export function CandidateResults({
             ) : (
               <div className="evidence-media-stage">
                 {assetPreviewUrl && assetMediaType?.startsWith("video/") ? (
-                  <video className="evidence-main-media" src={assetPreviewUrl} muted controls />
+                  <video className="evidence-main-media" src={assetPreviewUrl} muted controls style={mediaStyle} />
                 ) : null}
                 {assetPreviewUrl && !assetMediaType?.startsWith("video/") ? (
-                  <img className="evidence-main-media" src={assetPreviewUrl} alt={assetName ? `${assetName} 证据预览` : "证据预览"} />
+                  <img className="evidence-main-media" src={assetPreviewUrl} alt={assetName ? `${assetName} 证据预览` : "证据预览"} style={mediaStyle} />
                 ) : null}
                 {!assetPreviewUrl ? (
                   <div className="evidence-empty-stage">
@@ -880,25 +1506,53 @@ export function CandidateResults({
                     <span>{investigation ? "候选与证据链仍可继续核验。" : "上传图片或视频后，这里会显示主证据画布和线索标记。"}</span>
                   </div>
                 ) : null}
-                <div className="canvas-marker-layer" aria-hidden="true">
-                  {canvasClues.map((clue, index) => (
-                    <span
-                      className="canvas-marker"
-                      key={`${clue}-${index}`}
-                      style={clueMarkerPositions[index] ?? clueMarkerPositions[0]}
-                      title={clue}
+                {assetPreviewUrl ? (
+                  <div className="canvas-marker-layer" aria-hidden="true">
+                    {canvasMarkers.map((clue, index) => (
+                      <span
+                        className="canvas-marker"
+                        key={`${clue.markerTitle}-${index}`}
+                        style={clue.style}
+                        title={clue.markerTitle}
+                      >
+                        {clue.label}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                {assetPreviewUrl ? (
+                  <div className="canvas-tool-stack" aria-label="证据图工具">
+                    <button type="button" aria-label="缩小证据图" title="缩小证据图" onClick={() => setMediaZoom((zoom) => Math.max(0.5, Number((zoom - 0.25).toFixed(2))))}>
+                      ⌕
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="切换完整显示"
+                      title="切换完整显示"
+                      onClick={() => setMediaFit((fit) => (fit === "cover" ? "contain" : "cover"))}
                     >
-                      {index + 1}
-                    </span>
-                  ))}
-                </div>
-                <div className="canvas-tool-stack" aria-hidden="true">
-                  <span>⌕</span>
-                  <span>□</span>
-                  <span>＋</span>
-                  <span>↻</span>
-                  <span>☼</span>
-                </div>
+                      □
+                    </button>
+                    <button type="button" aria-label="放大证据图" title="放大证据图" onClick={() => setMediaZoom((zoom) => Math.min(3, Number((zoom + 0.25).toFixed(2))))}>
+                      ＋
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="重置证据图"
+                      title="重置证据图"
+                      onClick={() => {
+                        setMediaZoom(1);
+                        setMediaFit("cover");
+                        setMediaEnhanced(false);
+                      }}
+                    >
+                      ↻
+                    </button>
+                    <button type="button" aria-label="增强图像亮度" title="增强图像亮度" onClick={() => setMediaEnhanced((enhanced) => !enhanced)}>
+                      ☼
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
@@ -921,6 +1575,50 @@ export function CandidateResults({
                 <div className="focused-region-empty">等待 OCR、标识、建筑、道路和视角线索</div>
               )}
             </div>
+          ) : null}
+          {selectedCandidate ? (
+            <section className="primary-comparison-panel" aria-label="原图 / 地图对照">
+              <div className="primary-comparison-heading">
+                <h3>原图 / 地图对照</h3>
+                <span>{candidateScoreLabel(selectedCandidate)}</span>
+              </div>
+              <div className="comparison-split">
+                <div className="comparison-pane original-pane">
+                  <strong>原图</strong>
+                  {assetPreviewUrl ? (
+                    assetMediaType?.startsWith("video/") ? (
+                      <video src={assetPreviewUrl} muted controls />
+                    ) : (
+                      <img src={assetPreviewUrl} alt={assetName ? `${assetName} 原图对照` : "原图对照"} />
+                    )
+                  ) : (
+                    <div className="comparison-empty">原图预览未缓存</div>
+                  )}
+                </div>
+                <div className="comparison-pane map-pane">
+                  <strong>当前候选地图 / Earth</strong>
+                  <iframe
+                    title="当前候选地图对照"
+                    src={selectedCandidate.mapPreview.googleMapsEmbedUrl}
+                    loading="lazy"
+                    allowFullScreen
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                  <div className="comparison-map-meta">
+                    <strong>{candidateLabel(selectedCandidate)}</strong>
+                    <span>{candidateSecondaryLabel(selectedCandidate)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="comparison-actions">
+                <a className="inline-action" href={selectedCandidate.mapLinks.googleMaps} target="_blank" rel="noreferrer">
+                  打开 Maps 对照
+                </a>
+                <a className="inline-action" href={selectedCandidate.mapPreview.googleEarthWebUrl} target="_blank" rel="noreferrer">
+                  打开 Earth 对照
+                </a>
+              </div>
+            </section>
           ) : null}
           <div className="metadata-strip" aria-label="素材元数据">
             {metadataRows.map((row) => (
@@ -979,49 +1677,71 @@ export function CandidateResults({
               </div>
             </div>
             <p className="rail-subtitle">按置信度排序 · {candidateFilterSummary}</p>
-            <div className="candidate-ranking-list">
-              {sortedCandidates.length === 0 ? (
+            <div className="candidate-ranking-list" aria-label="候选排行">
+              {visibleCandidates.length === 0 ? (
                 <div className="candidate-rank-empty">
-                  <span>{investigation ? "尚未生成候选坐标" : "开始分析后显示候选排行"}</span>
-                  {!investigation && !loading && onShowSample ? (
-                    <button className="secondary-button" type="button" onClick={onShowSample}>
-                      查看示例证据链
-                    </button>
-                  ) : null}
+                  <span>{investigation && sortedCandidates.length > 0 ? "低置信候选已按设置隐藏" : investigation ? "尚未生成候选坐标" : "开始分析后显示候选排行"}</span>
+                  {investigation ? <small>{noCandidateReason}</small> : null}
                 </div>
               ) : null}
-              {sortedCandidates.length > 0 && filteredCandidates.length === 0 ? (
+              {visibleCandidates.length > 0 && filteredCandidates.length === 0 ? (
                 <div className="candidate-rank-empty">
                   <span>没有符合“{selectedFilterLabel}”的候选</span>
                 </div>
               ) : null}
-              {filteredCandidates.slice(0, 5).map((candidate, index) => {
+              {filteredCandidates.map((candidate, index) => {
+                const rankIndex = visibleCandidates.findIndex((item) => item.id === candidate.id);
+                const displayRank = rankIndex >= 0 ? rankIndex + 1 : index + 1;
                 const selected = selectedCandidate?.id === candidate.id;
                 return (
                   <button
-                    aria-label={`查看候选 ${index + 1} ${candidateLabel(candidate)}`}
-                    className={selected ? "candidate-rank-card selected" : "candidate-rank-card"}
+                    aria-label={candidateRankingLabel(candidate, displayRank)}
+                    className={`candidate-rank-card${selected ? " selected" : ""}`}
                     key={candidate.id}
                     type="button"
                     onClick={() => setSelectedCandidateId(candidate.id)}
                   >
-                    <span className="candidate-rank-number">{index + 1}</span>
+                    <span className="candidate-rank-number">{displayRank}</span>
                     <span className="candidate-thumb">
-                      {assetPreviewUrl ? <img src={assetPreviewUrl} alt="" /> : <span>{index + 1}</span>}
+                      {assetPreviewUrl ? <img src={assetPreviewUrl} alt="" /> : <span>{displayRank}</span>}
                     </span>
                     <span className="candidate-rank-main">
-                      <strong>{candidate.name ?? formatCoordinate(candidate.latitude, candidate.longitude)}</strong>
-                      <small>{formatCoordinate(candidate.latitude, candidate.longitude)}</small>
+                      <strong>{candidateLabel(candidate)}</strong>
+                      <small>{candidateCoordinate(candidate)}</small>
+                      <span className="candidate-rank-meta">
+                        <em>{confidenceLabel(candidate.confidence)}</em>
+                        <em>{formatDistanceFromBest(candidate, bestCandidate)}</em>
+                        {candidate.manualVerdict?.status && candidate.manualVerdict.status !== "unreviewed" ? (
+                          <em>{candidateVerdictLabel(candidate.manualVerdict.status)}</em>
+                        ) : null}
+                      </span>
                       <span className="score-meter" aria-hidden="true">
                         <span style={{ width: candidateScoreWidth(candidate) }} />
                       </span>
                     </span>
-                    <span className="candidate-score">{candidateScoreLabel(candidate)}</span>
+                    <span className="candidate-score">
+                      <strong>{candidateScoreLabel(candidate)}</strong>
+                    </span>
                   </button>
                 );
               })}
             </div>
           </section>
+          {selectedCandidate ? (
+            <FeatureMatchBoard
+              ariaLabel="当前候选证据对照"
+              candidate={selectedCandidate}
+              onAdd={(featureMatch) => onFeatureMatchAdd?.(selectedCandidate.id, featureMatch)}
+              onStatusChange={(featureMatchIndex, status) => onFeatureMatchStatusChange?.(selectedCandidate.id, featureMatchIndex, status)}
+              variant="rail"
+            />
+          ) : null}
+          {selectedCandidate ? (
+            <CandidateVerdictPanel
+              candidate={selectedCandidate}
+              onChange={(status, rationale) => onCandidateVerdictChange?.(selectedCandidate.id, status, rationale)}
+            />
+          ) : null}
           <div className="rail-split">
             <section className="rail-card verification-mini-card">
               <div className="rail-card-heading compact">
@@ -1047,9 +1767,12 @@ export function CandidateResults({
               </div>
               {selectedCandidate ? (
                 <div className="mini-map-summary">
-                  <strong>{formatCoordinate(selectedCandidate.latitude, selectedCandidate.longitude)}</strong>
-                  <span>{selectedCandidate.name ?? "未命名候选点"}</span>
+                  <strong>{candidateLabel(selectedCandidate)}</strong>
+                  <span>{candidateSecondaryLabel(selectedCandidate)}</span>
                   <p>完整卫星图与候选分布已移入上方“地图核验”标签。</p>
+                  <button className="small-button" type="button" onClick={() => openMapEvidenceTab("satellite")}>
+                    查看地图核验
+                  </button>
                 </div>
               ) : (
                 <div className="map-placeholder">等待候选坐标</div>
@@ -1066,51 +1789,47 @@ export function CandidateResults({
               </a>
             </div>
           ) : null}
-          {investigation ? (
-            <section className="rail-card report-actions-card">
-              <div className="rail-card-heading compact">
-                <h3>报告导出</h3>
-                <span>{investigation.candidates.length} 个候选</span>
-              </div>
-              <div className="report-action-grid">
-                {onPrintReport ? (
-                  <button className="small-button" type="button" onClick={onPrintReport}>
-                    打印 / 导出 PDF
-                  </button>
-                ) : null}
-                {onDownloadMarkdown ? (
-                  <button className="small-button" type="button" onClick={onDownloadMarkdown}>
-                    下载 Markdown
-                  </button>
-                ) : null}
-                {onDownloadHtml ? (
-                  <button className="small-button" type="button" onClick={onDownloadHtml}>
-                    下载 HTML
-                  </button>
-                ) : null}
-                {onCopyReport ? (
-                  <button className="small-button" type="button" onClick={onCopyReport}>
-                    复制报告
-                  </button>
-                ) : null}
-              </div>
-              {exportStatus ? (
-                <span className="save-status" role="status">
-                  {exportStatus}
-                </span>
-              ) : null}
-            </section>
-          ) : null}
         </aside>
       </div>
       <details className="advanced-verification-drawer">
         <summary>
           <span>高级核验详情</span>
-          <small>分析过程、候选对比、完整证据链与报告</small>
+          <small>分析过程、候选对比、证据链、报告与外部入口</small>
         </summary>
         <div className="advanced-verification-content">
-      <div className="summary-board">
-        <article className="evidence-card analysis-log-card">
+      <section className="verification-detail-hero" aria-label="高级核验摘要">
+        <div className="verification-detail-title">
+          <span>核验档案</span>
+          <h3>证据链总览</h3>
+          <p>
+            {selectedCandidate
+              ? `${candidateLabel(selectedCandidate)} · ${candidateCoordinate(selectedCandidate)}`
+              : investigation
+                ? "本次未生成可核验候选坐标。"
+                : "尚未生成候选坐标。"}
+          </p>
+        </div>
+        <div className="verification-detail-metrics" aria-label="高级核验指标">
+          <div>
+            <span>候选</span>
+            <strong>{visibleCandidates.length}</strong>
+          </div>
+          <div>
+            <span>当前评分</span>
+            <strong>{candidateScoreLabel(selectedCandidate)}</strong>
+          </div>
+          <div>
+            <span>来源</span>
+            <strong>{selectedCandidate?.sources.length ?? 0}</strong>
+          </div>
+          <div>
+            <span>待核验</span>
+            <strong>{topVerificationNotes.filter((item, index) => checklistTone(item, index) !== "good").length}</strong>
+          </div>
+        </div>
+      </section>
+      <div className="summary-board verification-dossier-grid">
+        <article className="evidence-card analysis-log-card dossier-process-card">
           <div className="analysis-card-heading">
             <h3>分析过程</h3>
             {loading ? <strong>{clampedProgress}%</strong> : null}
@@ -1122,9 +1841,9 @@ export function CandidateResults({
           ) : null}
           <ProcessList items={analysisLog} />
         </article>
-        <article className="best-candidate-card" aria-label="当前候选">
+        <article className="best-candidate-card dossier-candidate-card" aria-label="当前候选">
           <div className="card-title-row">
-            <h3>{selectedCandidate ? (selectedCandidateIndex === 0 ? "待核验候选（Top 1）" : `当前候选（排名 ${selectedCandidateIndex + 1}）`) : "当前候选"}</h3>
+            <h3>{selectedCandidate ? (selectedCandidateIndex === 0 ? "地图核验候选（Top 1）" : `当前候选（排名 ${selectedCandidateIndex + 1}）`) : "当前候选"}</h3>
             {selectedCandidate ? (
               <button className="icon-button" type="button" onClick={() => void copyCoordinate(selectedCandidate)} aria-label="复制坐标">
                 {copiedCandidateId === selectedCandidate.id ? "已复制" : "复制坐标"}
@@ -1133,19 +1852,20 @@ export function CandidateResults({
           </div>
           {selectedCandidate ? (
             <>
-              <p className="coordinate hero-coordinate">{formatCoordinate(selectedCandidate.latitude, selectedCandidate.longitude)}</p>
+              <strong className="candidate-place-name">{candidateLabel(selectedCandidate)}</strong>
+              <p className="coordinate hero-coordinate">{candidateSecondaryLabel(selectedCandidate)}</p>
               <dl className="candidate-metrics">
                 <div>
                   <dt>置信度</dt>
-                  <dd>{typeof selectedCandidate.matchScore === "number" ? (selectedCandidate.matchScore / 100).toFixed(2) : confidenceLabel(selectedCandidate.confidence)}</dd>
+                  <dd>{candidateScoreLabel(selectedCandidate)}</dd>
                 </div>
                 <div>
                   <dt>定位方式</dt>
-                  <dd>{selectedCandidateIndex === 0 ? "来源线索 + 待地图核验" : "视觉候选"}</dd>
+                  <dd>{selectedCandidateIndex === 0 ? "来源线索 + 地图核验" : "视觉候选"}</dd>
                 </div>
                 <div>
-                  <dt>地址（参考）</dt>
-                  <dd>{selectedCandidate.name ?? "等待人工补充地名"}</dd>
+                  <dt>候选 ID</dt>
+                  <dd>{selectedCandidate.id}</dd>
                 </div>
                 <div>
                   <dt>地理特征</dt>
@@ -1182,74 +1902,63 @@ export function CandidateResults({
             </div>
           )}
         </article>
-        <article className="distribution-card">
+        <article className="evidence-card map-handoff-card dossier-map-card">
           <div className="card-title-row">
-            <h3>候选位置分布</h3>
+            <h3>地图核验入口</h3>
             <span>{candidateFilterSummary}</span>
           </div>
-          <CandidateDistributionMap
-            candidates={filteredCandidates}
-            getCandidateLabel={candidateLabel}
-            onSelectCandidate={setSelectedCandidateId}
-            selectedCandidateId={selectedCandidate?.id ?? null}
-          />
+          {selectedCandidate ? (
+            <div className="map-handoff-summary">
+              <strong>{candidateLabel(selectedCandidate)}</strong>
+              <span>{candidateSecondaryLabel(selectedCandidate)}</span>
+              <p>候选分布和当前候选卫星图已集中到证据画布的“地图核验”标签。</p>
+              <button className="small-button" type="button" onClick={() => openMapEvidenceTab("satellite")}>
+                查看地图核验
+              </button>
+            </div>
+          ) : (
+            <p className="muted">候选生成后，可在“地图核验”标签统一查看分布、卫星图和外部地图入口。</p>
+          )}
         </article>
       </div>
-      <div className="primary-verification-grid">
-        <div className="map-preview">
+      <div className="primary-verification-grid compact-verification-grid verification-dossier-actions">
+        <article className="map-handoff-panel dossier-action-card">
           <div className="map-preview-header">
-            <strong>地图预览（Google Maps 卫星图）</strong>
-            {selectedCandidate ? (
-              <a href={selectedCandidate.mapLinks.googleMaps} target="_blank" rel="noreferrer">
-                打开 Maps
-              </a>
-            ) : null}
+            <strong>地图与 Earth 核验入口</strong>
+            {selectedCandidate ? <span>{candidateScoreLabel(selectedCandidate)}</span> : null}
           </div>
           {selectedCandidate ? (
-            <iframe
-              title="当前候选 Google Maps 卫星图像预览"
-              src={selectedCandidate.mapPreview.googleMapsEmbedUrl}
-              loading="lazy"
-              allow="fullscreen"
-              allowFullScreen
-              referrerPolicy="no-referrer-when-downgrade"
-            />
-          ) : (
-            <div className="map-placeholder">等待候选坐标</div>
-          )}
-        </div>
-        <div className="earth-screenshot-slot">
-          <div className="earth-screenshot-header">
-            <strong>Google Earth 核验位</strong>
-            {selectedCandidate ? (
-              <a href={selectedCandidate.mapPreview.googleEarthWebUrl} target="_blank" rel="noreferrer">
-                打开 Google Earth
-              </a>
-            ) : null}
-          </div>
-          <div className="earth-placeholder">
-            {selectedCandidate ? (
-              <>
-                <span>当前候选 Earth 入口已生成（待人工核验）</span>
-                <p className="earth-coordinate">{formatCoordinate(selectedCandidate.latitude, selectedCandidate.longitude)}</p>
+            <div className="map-handoff-body">
+              <div>
+                <span>当前候选</span>
+                <strong>{candidateLabel(selectedCandidate)}</strong>
+                <small>{candidateSecondaryLabel(selectedCandidate)}</small>
                 <p>{selectedCandidate.mapPreview.screenshotStatus}</p>
-                {selectedCandidate.mapPreview.notes.length > 0 ? (
-                  <ul className="earth-checklist">
-                    {selectedCandidate.mapPreview.notes.slice(0, 3).map((note) => (
-                      <li key={note}>{note}</li>
-                    ))}
-                  </ul>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <span>等待 Google Earth 核验位</span>
-                <p>候选坐标生成后会显示 Earth 入口和人工截图核验提示。</p>
-              </>
-            )}
-          </div>
-        </div>
-        <aside className="field-checklist">
+              </div>
+              <div className="map-handoff-actions">
+                <button className="small-button" type="button" onClick={() => openMapEvidenceTab("satellite")}>
+                  切换到地图核验
+                </button>
+                <a className="inline-action" href={selectedCandidate.mapLinks.googleMaps} target="_blank" rel="noreferrer">
+                  打开 Maps
+                </a>
+                <a className="inline-action" href={selectedCandidate.mapPreview.googleEarthWebUrl} target="_blank" rel="noreferrer">
+                  打开 Earth
+                </a>
+              </div>
+              {selectedCandidate.mapPreview.notes.length > 0 ? (
+                <ul className="earth-checklist">
+                  {selectedCandidate.mapPreview.notes.slice(0, 3).map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : (
+            <p className="muted">候选坐标生成后会显示地图核验标签、Google Maps 与 Google Earth 外部入口。</p>
+          )}
+        </article>
+        <aside className="field-checklist dossier-checklist-card">
           <div className="card-title-row">
             <h3>实地特征核对清单</h3>
             <strong>{topVerificationNotes.length}/8</strong>
@@ -1267,120 +1976,10 @@ export function CandidateResults({
           )}
         </aside>
       </div>
-      <div className="candidate-workbench">
-        <div className="candidate-workbench-heading">
-          <h3>候选位置对比</h3>
-          <span>{investigation ? `${investigation.searchQueries.length} 条查询线索` : "等待查询线索"}</span>
-        </div>
-        <EvidenceTraceStrip investigation={investigation} />
-        <div className="candidate-table-wrap">
-          <table className="candidate-comparison-table">
-            <thead>
-              <tr>
-                <th scope="col">排名</th>
-                <th scope="col">坐标（WGS84）</th>
-                <th scope="col">置信度</th>
-                <th scope="col" aria-label="匹配条" />
-                <th scope="col">匹配分数</th>
-                <th scope="col">定位方式</th>
-                <th scope="col">地理特征摘要</th>
-                <th scope="col">与最佳距离</th>
-                <th scope="col">方向一致性</th>
-                <th scope="col">地形一致性</th>
-                <th scope="col">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredCandidates.length === 0 ? (
-                <tr>
-                  <td colSpan={11}>
-                    {sortedCandidates.length > 0
-                      ? `没有符合“${selectedFilterLabel}”的候选点。`
-                      : investigation
-                      ? "本次没有可保留、排除或确认的候选点。请降低匹配阈值、补充范围线索，或上传更多连续截图后重新分析。"
-                      : "暂无候选坐标，开始分析后这里会显示可保留、排除或确认的候选点。"}
-                  </td>
-                </tr>
-              ) : null}
-              {filteredCandidates.map((candidate, index) => {
-                const status = candidateReviewStatus[candidate.id] ?? "pending";
-                const label = candidateLabel(candidate);
-                const rankIndex = sortedCandidates.findIndex((item) => item.id === candidate.id);
-                const displayRank = rankIndex >= 0 ? rankIndex + 1 : index + 1;
-
-                return (
-                  <tr
-                    aria-selected={selectedCandidate?.id === candidate.id}
-                    className={`review-${status}${selectedCandidate?.id === candidate.id ? " selected-candidate-row" : ""}`}
-                    key={candidate.id}
-                    onClick={() => setSelectedCandidateId(candidate.id)}
-                  >
-                    <td>{displayRank}</td>
-                    <th scope="row">
-                      <span>{formatCoordinate(candidate.latitude, candidate.longitude)}</span>
-                      <small>{candidate.name ?? "未命名候选点"}</small>
-                    </th>
-                    <td>{typeof candidate.matchScore === "number" ? (candidate.matchScore / 100).toFixed(2) : confidenceLabel(candidate.confidence)}</td>
-                    <td>
-                      <span className="score-meter">
-                        <span style={{ width: `${Math.max(8, Math.min(100, candidate.matchScore ?? 0))}%` }} />
-                      </span>
-                    </td>
-                    <td>
-                      {typeof candidate.matchScore === "number" ? candidate.matchScore : "未评分"}
-                    </td>
-                    <td>{displayRank === 1 ? "来源线索 + 待地图核验" : "视觉候选"}</td>
-                    <td>{(candidate.matchedFeatures ?? []).slice(0, 2).join("、") || "未提取"}</td>
-                    <td>{formatDistanceFromBest(candidate, bestCandidate)}</td>
-                    <td>
-                      {(() => {
-                        const direction = consistencyFromCandidate(candidate, "direction");
-                        return <span className={`consistency-badge consistency-${direction.tone}`}>{direction.label}</span>;
-                      })()}
-                    </td>
-                    <td>
-                      {(() => {
-                        const terrain = consistencyFromCandidate(candidate, "terrain");
-                        return <span className={`consistency-badge consistency-${terrain.tone}`}>{terrain.label}</span>;
-                      })()}
-                    </td>
-                    <td>
-                      <div className="review-actions candidate-action-cell">
-                        <span className={`review-status review-status-${status}`}>{reviewStatusLabels[status]}</span>
-                        <button className="small-button view-candidate-button" type="button" aria-label={`查看 ${label}`} onClick={() => setSelectedCandidateId(candidate.id)}>
-                          查看
-                        </button>
-                        <button className="small-button" type="button" aria-label={`保留 ${label}`} onClick={() => setReviewStatus(candidate.id, "keep")}>
-                          保留
-                        </button>
-                        <button
-                          className="small-button"
-                          type="button"
-                          aria-label={`排除 ${label}`}
-                          onClick={() => setReviewStatus(candidate.id, "excluded")}
-                        >
-                          排除
-                        </button>
-                        <button
-                          className="small-button"
-                          type="button"
-                          aria-label={`确认 ${label}`}
-                          onClick={() => setReviewStatus(candidate.id, "confirmed")}
-                        >
-                          确认
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
       {investigation ? (
-        <details className="evidence-drawer" open>
+        <details className="evidence-drawer dossier-evidence-drawer">
           <summary>证据链与搜索过程</summary>
+          <EvidenceTraceStrip investigation={investigation} />
           <div className="evidence-overview">
           <article className="evidence-card">
             <h3>自动识别线索</h3>
@@ -1436,39 +2035,61 @@ export function CandidateResults({
         </details>
       ) : null}
       <div className="map-verification-section">
-        <h3>地图与 Earth 核验</h3>
-        {filteredCandidates.length === 0 ? (
-          <div className="map-preview-grid">
-            <div className="map-preview map-preview-empty">
-              <div className="map-preview-header">
-                <strong>Google Maps 卫星图像预览</strong>
-              </div>
-              <p>{sortedCandidates.length > 0 ? `没有符合“${selectedFilterLabel}”的候选坐标。` : "尚无候选坐标，无法加载 Google Maps 卫星预览。"}</p>
-            </div>
-            <div className="earth-preview">
-              <strong>Google Earth 历史影像核验</strong>
-              <p>{sortedCandidates.length > 0 ? "切换筛选条件后可继续查看候选 Earth 入口。" : "尚无候选坐标，无法生成 Google Earth 入口。"}</p>
-              {renderList(["先生成至少一个候选坐标，再对比道路、轨道、建筑、花坛、电线杆和视角关系。"])}
-            </div>
+        <div>
+          <h3>地图核验入口</h3>
+          <p className="muted">
+            {filteredCandidates.length === 0
+              ? visibleCandidates.length > 0
+                ? `没有符合“${selectedFilterLabel}”的候选坐标。`
+                : sortedCandidates.length > 0
+                  ? "低置信候选已按设置隐藏，无法加载地图核验。"
+                  : "尚无候选坐标，无法加载地图核验。"
+              : "卫星图、候选分布和当前候选地图入口已集中到上方“地图核验”标签。"}
+          </p>
+        </div>
+        {selectedCandidate ? (
+          <div className="map-verification-actions">
+            <button className="small-button" type="button" onClick={() => openMapEvidenceTab("satellite")}>
+              查看地图核验
+            </button>
+            <a className="inline-action" href={selectedCandidate.mapLinks.googleMaps} target="_blank" rel="noreferrer">
+              打开 Maps
+            </a>
+            <a className="inline-action" href={selectedCandidate.mapPreview.googleEarthWebUrl} target="_blank" rel="noreferrer">
+              打开 Earth
+            </a>
           </div>
-        ) : (
-          <p className="muted">每个候选卡片都包含 Google Maps 卫星预览、Google Earth 入口和逐项核验清单。</p>
-        )}
+        ) : null}
       </div>
-      <div className="candidate-list">
-        {filteredCandidates.length === 0 ? <p className="muted">{sortedCandidates.length > 0 ? `没有符合“${selectedFilterLabel}”的候选坐标` : "尚未生成候选坐标"}</p> : null}
+      <div className="dossier-ledger-heading" aria-label="候选坐标台账摘要">
+        <div>
+          <span>候选坐标台账</span>
+          <strong>{candidateFilterSummary}</strong>
+        </div>
+        <div className="dossier-ledger-meta">
+          <span>{selectedFilterLabel}</span>
+          {hiddenLowConfidenceCount > 0 ? <span>隐藏低置信 {hiddenLowConfidenceCount}</span> : null}
+        </div>
+      </div>
+      <div className="candidate-list dossier-candidate-ledger">
+        {filteredCandidates.length === 0 ? (
+          <p className="muted">
+            {visibleCandidates.length > 0
+              ? `没有符合“${selectedFilterLabel}”的候选坐标`
+              : sortedCandidates.length > 0
+                ? "低置信候选已按设置隐藏"
+                : "尚未生成候选坐标"}
+          </p>
+        ) : null}
         {filteredCandidates.map((candidate, index) => {
-          const rankIndex = sortedCandidates.findIndex((item) => item.id === candidate.id);
+          const rankIndex = visibleCandidates.findIndex((item) => item.id === candidate.id);
           const displayRank = rankIndex >= 0 ? rankIndex + 1 : index + 1;
           return (
-          <article className="candidate" key={candidate.id}>
+          <article className="candidate dossier-candidate-row" key={candidate.id}>
             <div className="candidate-header">
               <strong>{candidate.name ? `候选 ${displayRank}：${candidate.name}` : `候选 ${displayRank}`}</strong>
               <div className="candidate-badges">
                 <span>{confidenceLabel(candidate.confidence)}</span>
-                <span className={`review-status review-status-${candidateReviewStatus[candidate.id] ?? "pending"}`}>
-                  {reviewStatusLabels[candidateReviewStatus[candidate.id] ?? "pending"]}
-                </span>
               </div>
             </div>
             <div className="coordinate-row">
@@ -1485,6 +2106,13 @@ export function CandidateResults({
                 </div>
               ) : null}
               <div>
+                <h4>人工结论</h4>
+                {renderList([
+                  candidateVerdictLabel(candidate.manualVerdict?.status),
+                  ...(candidate.manualVerdict?.rationale ? [candidate.manualVerdict.rationale] : [])
+                ])}
+              </div>
+              <div>
                 <h4>已匹配特征</h4>
                 {renderList(candidate.matchedFeatures ?? [])}
               </div>
@@ -1497,47 +2125,33 @@ export function CandidateResults({
                 {renderList(candidate.viewpointNotes ?? [])}
               </div>
             </div>
-            <div className="map-preview-grid">
-              <div className="map-preview">
-                <div className="map-preview-header">
-                  <strong>{displayRank === 1 ? "Google Maps 卫星图像预览" : `候选 ${displayRank} 地图预览`}</strong>
-                  <a href={candidate.mapLinks.googleMaps} target="_blank" rel="noreferrer">
-                    打开 Maps
-                  </a>
-                </div>
-                <div className="map-link-card">
-                  <strong>{formatCoordinate(candidate.latitude, candidate.longitude)}</strong>
-                  <span>完整地图预览已集中在上方当前候选区域，避免同时加载多个地图。</span>
-                </div>
+            <div className="candidate-map-actions">
+              <div className="candidate-map-summary">
+                <strong>{candidateLabel(candidate)}</strong>
+                <span>{candidateSecondaryLabel(candidate)}</span>
+                <p>卫星图和候选分布在证据画布“地图核验”标签统一查看，候选卡只保留外部入口与核验备注。</p>
               </div>
-              <div className="earth-preview">
-                <strong>Earth 截图核验位</strong>
-                <div className="earth-placeholder compact">
-                  <span>候选卡片未自动获取 Earth 截图</span>
-                </div>
-                <strong>Google Earth 历史影像核验</strong>
-                <p>{candidate.mapPreview.screenshotStatus}</p>
-                <a href={candidate.mapPreview.googleEarthWebUrl} target="_blank" rel="noreferrer">
-                  打开 Earth 历史影像
+              <div className="candidate-map-links">
+                <button className="small-button" type="button" onClick={() => openMapEvidenceTab("satellite")}>
+                  查看地图核验
+                </button>
+                <a className="inline-action" href={candidate.mapLinks.googleMaps} target="_blank" rel="noreferrer">
+                  打开 Maps
                 </a>
-                {renderList(candidate.mapPreview.notes)}
+                <a className="inline-action" href={candidate.mapPreview.googleEarthWebUrl} target="_blank" rel="noreferrer">
+                  打开 Earth
+                </a>
               </div>
-            </div>
-            {(candidate.osintLinks ?? []).length > 0 ? (
-              <section className="osint-links-panel">
-                <h4>候选外部 OSINT 核验入口</h4>
-                <div className="osint-link-grid">
-                  {candidate.osintLinks?.map((link) => (
-                    <a aria-label={`${link.title} for ${candidateLabel(candidate)}`} href={link.url} key={link.title} target="_blank" rel="noreferrer">
-                      <strong>{link.title}</strong>
-                      <span>{link.note}</span>
-                    </a>
-                  ))}
+              {candidate.mapPreview.notes.length > 0 ? (
+                <div className="candidate-map-notes">
+                  <strong>Earth 核验备注</strong>
+                  {renderList(candidate.mapPreview.notes.slice(0, 4))}
                 </div>
-              </section>
-            ) : null}
+              ) : null}
+            </div>
             <details>
               <summary>查看完整证据链</summary>
+              <FeatureMatchBoard candidate={candidate} />
               <h4>为什么像</h4>
               {renderList(candidate.matchingEvidence)}
               <h4>不确定点</h4>
@@ -1551,7 +2165,7 @@ export function CandidateResults({
         })}
       </div>
       {investigation ? (
-        <details className="report">
+        <details className="report dossier-report-drawer">
           <summary>完整 Markdown 报告</summary>
           <pre>{investigation.report.fullMarkdown}</pre>
         </details>

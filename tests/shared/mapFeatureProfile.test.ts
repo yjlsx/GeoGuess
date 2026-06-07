@@ -33,4 +33,35 @@ describe("buildMapFeatureProfile", () => {
     expect(profile.searchInstruction).toContain("red wall");
     expect(profile.searchInstruction).not.toContain("CCTV");
   });
+
+  it("keeps generic broadcast overlays out of map-verifiable feature sets", () => {
+    const profile = buildMapFeatureProfile(
+      {
+        source: "news clip"
+      },
+      {
+        ocrText: ["2026-05-01 timestamp overlay", "Depot 14"],
+        visibleLabels: ["top-left logo bug"],
+        languages: ["English"],
+        sceneFeatures: ["top-left logo bug", "rail platform", "blue warehouse", "right-corner watermark over road"],
+        spatialRelationships: [
+          "lower-right timestamp overlays the road",
+          "blue warehouse behind the rail platform"
+        ],
+        inferredSearchTerms: ["rail platform blue warehouse"]
+      }
+    );
+
+    expect(profile.primaryFeatures).toEqual(["rail platform", "blue warehouse"]);
+    expect(profile.spatialRelationships).toEqual(["blue warehouse behind the rail platform"]);
+    expect(profile.auxiliaryTextClues).toEqual(["Depot 14"]);
+    expect(profile.excludedSourceOnlyClues).toEqual([
+      "top-left logo bug",
+      "2026-05-01 timestamp overlay",
+      "right-corner watermark over road",
+      "lower-right timestamp overlays the road"
+    ]);
+    expect(profile.searchInstruction).not.toContain("timestamp");
+    expect(profile.searchInstruction).not.toContain("watermark");
+  });
 });

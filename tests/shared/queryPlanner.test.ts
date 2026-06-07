@@ -79,4 +79,46 @@ describe("buildSearchQueries", () => {
     );
     expect(queries[0].purpose).toBe("visual-feature-bundle");
   });
+
+  it("adds map imagery and viewpoint geometry searches for physical verification", () => {
+    const queries = buildSearchQueries(scope, clues);
+    const byPurpose = new Map(queries.map((query) => [query.purpose, query.query]));
+    const mapQuery = byPurpose.get("map-imagery-verification");
+    const viewpointQuery = byPurpose.get("viewpoint-geometry");
+
+    expect(mapQuery).toBeDefined();
+    expect(viewpointQuery).toBeDefined();
+    expect(mapQuery).toContain("satellite map");
+    expect(mapQuery).toContain("station building");
+    expect(mapQuery).toContain("grassland");
+    expect(viewpointQuery).toContain("railway runs horizontally in foreground");
+    expect(viewpointQuery).toContain("station building behind tracks");
+    expect([...byPurpose.values()].join("\n")).not.toContain("CCTV 7 satellite map");
+  });
+
+  it("does not use broadcast overlay artifacts as map search features", () => {
+    const queries = buildSearchQueries(
+      {
+        country: "Mongolia",
+        facilityType: "railway station"
+      },
+      {
+        ...clues,
+        visibleLabels: ["top-left logo bug"],
+        sceneFeatures: ["top-left logo bug", "rail platform", "blue warehouse", "right-corner watermark over road"],
+        spatialRelationships: [
+          "lower-right timestamp overlays the road",
+          "blue warehouse behind the rail platform"
+        ],
+        inferredSearchTerms: []
+      }
+    );
+    const queryText = queries.map((query) => query.query).join("\n");
+
+    expect(queryText).toContain("rail platform");
+    expect(queryText).toContain("blue warehouse");
+    expect(queryText).not.toContain("logo bug");
+    expect(queryText).not.toContain("watermark");
+    expect(queryText).not.toContain("timestamp");
+  });
 });

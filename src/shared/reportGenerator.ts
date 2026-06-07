@@ -1,5 +1,6 @@
 import { formatCoordinate } from "./mapLinks";
-import type { CoordinateBox, OutputLanguage, ReportInput, UserScope } from "./types";
+import { searchPurposeLabel } from "./searchPurposeLabels";
+import type { CandidateManualVerdict, CoordinateBox, FeatureMatch, OutputLanguage, ReportInput, UserScope } from "./types";
 
 function t(language: OutputLanguage, zh: string, en: string) {
   return language === "zh-CN" ? zh : en;
@@ -22,6 +23,96 @@ function confidenceLabel(confidence: string, language: OutputLanguage) {
   return labels[language][confidence] ?? confidence;
 }
 
+function featureMatchStatusLabel(status: FeatureMatch["status"], language: OutputLanguage) {
+  const labels: Record<OutputLanguage, Record<FeatureMatch["status"], string>> = {
+    "zh-CN": {
+      matched: "已匹配",
+      partial: "部分匹配",
+      unverified: "待核验",
+      mismatch: "明显不匹配"
+    },
+    "en-US": {
+      matched: "Matched",
+      partial: "Partial match",
+      unverified: "Unverified",
+      mismatch: "Mismatch"
+    }
+  };
+
+  return labels[language][status] ?? status;
+}
+
+function aiVerificationStatusLabel(status: NonNullable<FeatureMatch["aiVerification"]>["status"], language: OutputLanguage) {
+  const labels: Record<OutputLanguage, Record<NonNullable<FeatureMatch["aiVerification"]>["status"], string>> = {
+    "zh-CN": {
+      supports: "支持",
+      contradicts: "矛盾",
+      inconclusive: "证据不足"
+    },
+    "en-US": {
+      supports: "Supports",
+      contradicts: "Contradicts",
+      inconclusive: "Inconclusive"
+    }
+  };
+
+  return labels[language][status] ?? status;
+}
+
+function manualVerdictLabel(status: CandidateManualVerdict["status"] | undefined, language: OutputLanguage) {
+  const labels: Record<OutputLanguage, Record<CandidateManualVerdict["status"], string>> = {
+    "zh-CN": {
+      unreviewed: "未人工判定",
+      confirmed: "已确认",
+      kept: "保留核验",
+      excluded: "已排除"
+    },
+    "en-US": {
+      unreviewed: "Not manually reviewed",
+      confirmed: "Confirmed",
+      kept: "Kept for review",
+      excluded: "Excluded"
+    }
+  };
+
+  return labels[language][status ?? "unreviewed"];
+}
+
+function featureMatchList(matches: FeatureMatch[] | undefined, language: OutputLanguage) {
+  if (!matches || matches.length === 0) {
+    return "- 未提供";
+  }
+
+  return matches
+    .map((match, index) => {
+      const aiVerification = match.aiVerification;
+      const sourceDetails = [
+        match.imageAnnotation ? `  - ${t(language, "原图标注说明", "Original image annotation")}：${match.imageAnnotation}` : "",
+        match.mapAnnotation ? `  - ${t(language, "地图/Earth 标注说明", "Map/Earth annotation")}：${match.mapAnnotation}` : "",
+        match.evidenceLink ? `  - ${t(language, "核验链接", "Evidence link")}：${match.evidenceLink}` : "",
+        match.mapScreenshotUrl ? `  - ${t(language, "地图/Earth 截图", "Map/Earth screenshot")}：${match.mapScreenshotUrl}` : "",
+        match.mapScreenshotAttachment
+          ? `  - ${t(language, "地图/Earth 截图附件", "Map/Earth screenshot attachment")}：${match.mapScreenshotAttachment.name}`
+          : "",
+        match.earthImageDate ? `  - ${t(language, "地图/Earth 影像日期", "Map/Earth imagery date")}：${match.earthImageDate}` : "",
+        aiVerification ? `  - ${t(language, "AI 核验", "AI verification")}：${aiVerificationStatusLabel(aiVerification.status, language)}` : "",
+        aiVerification ? `  - ${t(language, "AI 核验置信度", "AI verification confidence")}：${confidenceLabel(aiVerification.confidence, language)}` : "",
+        aiVerification?.rationale ? `  - ${t(language, "AI 核验理由", "AI verification rationale")}：${aiVerification.rationale}` : "",
+        aiVerification?.model ? `  - ${t(language, "AI 核验模型", "AI verification model")}：${aiVerification.model}` : "",
+        aiVerification?.checkedAt ? `  - ${t(language, "AI 核验时间", "AI verification time")}：${aiVerification.checkedAt}` : ""
+      ].filter(Boolean);
+
+      return [
+        `- ${t(language, "对应", "Match")} ${index + 1}：${featureMatchStatusLabel(match.status, language)}`,
+        `  - ${t(language, "原图特征", "Image feature")}：${match.imageFeature}`,
+        `  - ${t(language, "地图/Earth 对应", "Map/Earth counterpart")}：${match.mapFeature}`,
+        `  - ${t(language, "核验动作", "Verification action")}：${match.verification}`,
+        ...sourceDetails
+      ].join("\n");
+    })
+    .join("\n");
+}
+
 function list(items: string[]) {
   if (items.length === 0) {
     return "- 未提供";
@@ -30,11 +121,67 @@ function list(items: string[]) {
   return items.map((item) => `- ${item}`).join("\n");
 }
 
+function prioritizedSummaryItems(items: string[], maxItems: number, preferredPattern: RegExp) {
+  if (items.length <= maxItems) {
+    return items;
+  }
+
+  const preferred = items.find((item) => preferredPattern.test(item));
+  if (!preferred) {
+    return items.slice(0, maxItems);
+  }
+
+  return [...items.filter((item) => item !== preferred).slice(0, maxItems - 1), preferred];
+}
+
 function formatCoordinateBox(coordinateBox: CoordinateBox) {
-  return `${formatCoordinate(coordinateBox.minLat, coordinateBox.minLon)} 到 ${formatCoordinate(
-    coordinateBox.maxLat,
-    coordinateBox.maxLon
-  )}`;
+  const south = Math.min(coordinateBox.minLat, coordinateBox.maxLat);
+  const north = Math.max(coordinateBox.minLat, coordinateBox.maxLat);
+  const west = Math.min(coordinateBox.minLon, coordinateBox.maxLon);
+  const east = Math.max(coordinateBox.minLon, coordinateBox.maxLon);
+  return `${formatCoordinate(south, west)} 到 ${formatCoordinate(north, east)}`;
+}
+
+function scopeValueLabel(key: string, value: string, language: OutputLanguage) {
+  const labels: Record<OutputLanguage, Record<string, Record<string, string>>> = {
+    "zh-CN": {
+      regionScope: {
+        custom: "用户自定义范围",
+        global: "全球范围",
+        country: "国家/地区范围"
+      },
+      boundaryMode: {
+        rectangle: "矩形坐标框",
+        polygon: "多边形边界"
+      }
+    },
+    "en-US": {
+      regionScope: {
+        custom: "custom user boundary",
+        global: "global search",
+        country: "country/region scope"
+      },
+      boundaryMode: {
+        rectangle: "coordinate rectangle",
+        polygon: "polygon boundary"
+      }
+    }
+  };
+
+  return labels[language][key]?.[value] ?? value;
+}
+
+function formatPolygonCoordinates(value: string, language: OutputLanguage) {
+  const rows = value
+    .split(/\r?\n/)
+    .map((row) => row.trim())
+    .filter(Boolean);
+  if (rows.length === 0) {
+    return value;
+  }
+
+  const prefix = language === "zh-CN" ? "顶点" : "vertex";
+  return rows.map((row, index) => `${prefix} ${index + 1}: ${row}`).join("；");
 }
 
 function scopeLabel(key: string, language: OutputLanguage) {
@@ -78,33 +225,12 @@ function formatScope(userScope: UserScope, language: OutputLanguage) {
       return [`${scopeLabel(key, language)}：${formatCoordinateBox(value as CoordinateBox)}`];
     }
 
-    return [`${scopeLabel(key, language)}：${value}`];
-  });
-}
-
-function queryPurposeLabel(purpose: string, language: OutputLanguage) {
-  const labels: Record<OutputLanguage, Record<string, string>> = {
-    "zh-CN": {
-      "source-traceback": "来源反查",
-      "visual-feature-bundle": "视觉特征集合",
-      "visual-inferred-term": "视觉推断词",
-      "ocr-visual-context": "OCR/视觉上下文",
-      "scope-source-facility": "范围/来源/设施",
-      "ocr-scope": "OCR/范围",
-      "inferred-term": "推断搜索词"
-    },
-    "en-US": {
-      "source-traceback": "source traceback",
-      "visual-feature-bundle": "visual feature bundle",
-      "visual-inferred-term": "visual inferred term",
-      "ocr-visual-context": "OCR with visual context",
-      "scope-source-facility": "scope/source/facility",
-      "ocr-scope": "OCR/scope",
-      "inferred-term": "inferred term"
+    if (key === "polygonCoordinates") {
+      return [`${scopeLabel(key, language)}：${formatPolygonCoordinates(String(value), language)}`];
     }
-  };
 
-  return labels[language][purpose] ?? purpose;
+    return [`${scopeLabel(key, language)}：${scopeValueLabel(key, String(value), language)}`];
+  });
 }
 
 export function buildReports(input: ReportInput) {
@@ -121,10 +247,13 @@ export function buildReports(input: ReportInput) {
               candidate.mapLinks.googleMaps,
               "",
               t(language, "关键证据：", "Key evidence:"),
-              list(candidate.matchingEvidence.slice(0, 3)),
+              list(prioritizedSummaryItems(candidate.matchingEvidence, 3, /本地证据评分|local evidence score/i)),
+              candidate.manualVerdict?.status && candidate.manualVerdict.status !== "unreviewed"
+                ? `${t(language, "人工结论", "Manual verdict")}：${manualVerdictLabel(candidate.manualVerdict.status, language)}`
+                : "",
               "",
               t(language, "主要不确定点：", "Main uncertainty:"),
-              list(candidate.uncertainty.slice(0, 2))
+              list(prioritizedSummaryItems(candidate.uncertainty, 2, /本地证据评分扣分项|local evidence score/i))
             ].join("\n");
           })
           .join("\n\n");
@@ -190,7 +319,7 @@ export function buildReports(input: ReportInput) {
     list((input.searchProcess ?? []).map((step) => `${step.title}${step.query ? `：${step.query}` : ""}\n  - ${step.rationale}`)),
     "",
     t(language, "## 搜索语句", "## Search Queries"),
-    list(input.searchQueries.map((query) => `${query.query}（${queryPurposeLabel(query.purpose, language)}）`)),
+    list(input.searchQueries.map((query) => `${query.query}（${searchPurposeLabel(query.purpose, language)}）`)),
     "",
     t(language, "## 季节与历史影像核验", "## Season and Historical Imagery Check"),
     list([
@@ -212,9 +341,13 @@ export function buildReports(input: ReportInput) {
         `${t(language, "Google Maps 卫星图像预览", "Google Maps satellite imagery preview")}：${candidate.mapPreview.googleMapsEmbedUrl}`,
         `${t(language, "Google Earth 历史影像入口", "Google Earth historical imagery entry")}：${candidate.mapPreview.googleEarthWebUrl}`,
         `${t(language, "截图状态", "Screenshot status")}：${candidate.mapPreview.screenshotStatus}`,
+        `${t(language, "人工结论", "Manual verdict")}：${manualVerdictLabel(candidate.manualVerdict?.status, language)}`,
+        candidate.manualVerdict?.rationale ? `${t(language, "人工结论理由", "Manual verdict rationale")}：${candidate.manualVerdict.rationale}` : "",
         "",
         t(language, "已匹配物理特征：", "Matched physical features:"),
         list(candidate.matchedFeatures ?? []),
+        t(language, "证据对照：", "Feature match evidence:"),
+        featureMatchList(candidate.featureMatches, language),
         t(language, "待核验或不匹配特征：", "Missing or unverified features:"),
         list(candidate.missingOrUnverifiedFeatures ?? []),
         t(language, "视角说明：", "Viewpoint notes:"),

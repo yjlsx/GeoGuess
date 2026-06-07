@@ -61,6 +61,39 @@ describe("runInvestigation", () => {
     expect(second.extractedClues.sceneFeatures).not.toBe(first.extractedClues.sceneFeatures);
   });
 
+  it("sanitizes manual overlay artifacts before building search and reports", async () => {
+    const result = await runInvestigation({
+      image: {
+        originalPath: "local://sample",
+        cropMode: "full"
+      },
+      userScope: {
+        country: "Mongolia",
+        facilityType: "railway station"
+      },
+      manualClues: {
+        ocrText: ["Depot 14"],
+        visibleLabels: ["station sign"],
+        languages: ["English"],
+        sceneFeatures: ["top-left logo bug", "rail platform", "blue warehouse"],
+        spatialRelationships: ["lower-right timestamp overlays the road", "blue warehouse behind rail platform"],
+        inferredSearchTerms: ["timestamp overlay rail depot", "rail platform blue warehouse"]
+      }
+    });
+
+    expect(result.extractedClues.sceneFeatures).toEqual(["rail platform", "blue warehouse"]);
+    expect(result.extractedClues.spatialRelationships).toEqual(["blue warehouse behind rail platform"]);
+    expect(result.extractedClues.inferredSearchTerms).toEqual(["rail platform blue warehouse"]);
+    expect(result.extractedClues.visibleLabels).toEqual([
+      "station sign",
+      "top-left logo bug",
+      "lower-right timestamp overlays the road",
+      "timestamp overlay rail depot"
+    ]);
+    expect(result.searchQueries.map((query) => query.query).join("\n")).not.toContain("logo bug");
+    expect(result.report.fullMarkdown).not.toContain("- top-left logo bug\n- rail platform");
+  });
+
   it("uses injected providers with crop path, planned queries, custom candidate, and supplied id", async () => {
     const manualClues: ExtractedClues = {
       ocrText: ["Station 42"],
@@ -153,6 +186,56 @@ describe("runInvestigation", () => {
     expect(result.mapFeatureProfile.primaryFeatures).toContain("rail siding");
     expect(result.report.fullMarkdown).toContain("搜索过程");
     expect(result.report.fullMarkdown).toContain("地图核验特征集合");
+  });
+
+  it("continues the investigation when online candidate search is temporarily unavailable", async () => {
+    const manualClues: ExtractedClues = {
+      ocrText: ["Station 42"],
+      visibleLabels: ["Blue roof"],
+      languages: ["English"],
+      sceneFeatures: ["rail siding"],
+      spatialRelationships: ["road north of tracks"],
+      inferredSearchTerms: ["custom depot"]
+    };
+
+    const result = await runInvestigation({
+      id: "candidate-search-outage",
+      image: {
+        originalPath: "local://original-image",
+        cropPath: "local://cropped-image",
+        cropMode: "full"
+      },
+      userScope: {
+        country: "Mongolia",
+        facilityType: "rail depot"
+      },
+      outputLanguage: "zh-CN",
+      manualClues,
+      providers: {
+        vision: {
+          async extractClues(request) {
+            return request.manualClues ?? manualClues;
+          }
+        },
+        metadata: {
+          async extractMetadata() {
+            return [];
+          }
+        },
+        search: {
+          async findCandidates() {
+            throw new Error("联网候选搜索暂时不可用（HTTP 502）。系统已自动重试 3 次，仍未收到可用结果。");
+          }
+        }
+      }
+    });
+
+    expect(result.id).toBe("candidate-search-outage");
+    expect(result.extractedClues.sceneFeatures).toContain("rail siding");
+    expect(result.searchQueries.length).toBeGreaterThan(0);
+    expect(result.candidates).toEqual([]);
+    expect(result.report.summaryMarkdown).toContain("尚未生成候选坐标");
+    expect(result.report.fullMarkdown).toContain("候选坐标搜索暂时不可用");
   });
 
   it("turns EXIF GPS metadata into a direct high-confidence coordinate candidate", async () => {
@@ -264,6 +347,43 @@ describe("runInvestigation", () => {
 
     expect(seen.imagePaths).toEqual(["local://frame-a", "local://frame-b"]);
     expect(seen.searchedFeatures).toEqual(["red wall", "blue roof"]);
+  });
+
+  it("uses readable search process labels for map imagery and viewpoint queries", async () => {
+    const result = await runInvestigation({
+      image: {
+        originalPath: "local://sample",
+        cropMode: "full"
+      },
+      userScope: {
+        country: "Mongolia",
+        region: "Dornogovi",
+        facilityType: "railway station"
+      },
+      manualClues: {
+        ocrText: [],
+        visibleLabels: [],
+        languages: ["English"],
+        sceneFeatures: ["railway", "station building", "grassland"],
+        spatialRelationships: ["railway runs horizontally in foreground", "station building behind tracks"],
+        inferredSearchTerms: []
+      },
+      providers: {
+        search: {
+          async findCandidates() {
+            return [];
+          }
+        }
+      }
+    });
+
+    const processText = result.searchProcess.map((step) => step.rationale).join("\n");
+    expect(result.searchQueries.map((query) => query.purpose)).toContain("map-imagery-verification");
+    expect(result.searchQueries.map((query) => query.purpose)).toContain("viewpoint-geometry");
+    expect(processText).toContain("地图影像核验");
+    expect(processText).toContain("视角几何核验");
+    expect(processText).not.toContain("map-imagery-verification");
+    expect(processText).not.toContain("viewpoint-geometry");
   });
 
   it("uses the default OpenAI-backed search provider when vision config is supplied", async () => {

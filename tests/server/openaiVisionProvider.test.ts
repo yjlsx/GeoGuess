@@ -84,4 +84,69 @@ describe("createOpenAIVisionProvider", () => {
     expect(clues.sceneFeatures).toContain("railway tracks");
     expect(clues.spatialRelationships).toContain("tracks run horizontally in front of the building");
   });
+
+  it("keeps broadcast overlays out of physical feature and search clue fields", async () => {
+    const imageDir = join(process.cwd(), "tmp-test-output");
+    await mkdir(imageDir, { recursive: true });
+    const imagePath = join(imageDir, "vision-provider-overlays.jpg");
+    await writeFile(
+      imagePath,
+      await sharp({
+        create: {
+          width: 12,
+          height: 8,
+          channels: 3,
+          background: "#ffffff"
+        }
+      })
+        .jpeg()
+        .toBuffer()
+    );
+
+    const create = vi.fn(async (_input: unknown) => ({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              ocrText: ["Depot 14"],
+              visibleLabels: ["station sign"],
+              languages: ["English"],
+              sceneFeatures: ["top-left logo bug", "rail platform", "blue warehouse"],
+              spatialRelationships: ["lower-right timestamp overlays the road", "blue warehouse behind rail platform"],
+              inferredSearchTerms: ["timestamp overlay rail depot", "rail platform blue warehouse"]
+            })
+          }
+        }
+      ]
+    }));
+    const provider = createOpenAIVisionProvider({
+      apiKey: "test-api-key",
+      model: "vision-model",
+      clientFactory: vi.fn(() => ({
+        chat: {
+          completions: {
+            create
+          }
+        }
+      }))
+    });
+
+    const clues = await provider.extractClues({
+      imagePath,
+      userScope: { country: "Mongolia" }
+    });
+    const request = create.mock.calls[0][0] as { messages: unknown[] };
+    const requestText = JSON.stringify(request.messages);
+
+    expect(requestText).toContain("只能写入 ocrText/visibleLabels");
+    expect(clues.visibleLabels).toEqual([
+      "station sign",
+      "top-left logo bug",
+      "lower-right timestamp overlays the road",
+      "timestamp overlay rail depot"
+    ]);
+    expect(clues.sceneFeatures).toEqual(["rail platform", "blue warehouse"]);
+    expect(clues.spatialRelationships).toEqual(["blue warehouse behind rail platform"]);
+    expect(clues.inferredSearchTerms).toEqual(["rail platform blue warehouse"]);
+  });
 });

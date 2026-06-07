@@ -37,26 +37,11 @@ body,
   box-shadow: inset 0 -1px 0 rgba(148, 163, 184, 0.16), 0 6px 18px rgba(0, 0, 0, 0.55);
 }
 
-.app-shell .nav-popover,
 .app-shell .settings-popover .config-panel {
   border-color: #27344c;
   background: #131c2e;
   color: #e7edf7;
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.6);
-}
-
-.app-shell .nav-popover span {
-  color: #93a3bd;
-}
-
-.app-shell .nav-popover button {
-  border-color: #2d3c57;
-  background: #0e1626;
-  color: #5eead4;
-}
-
-.app-shell .user-chip {
-  background: #1d4ed8;
 }
 
 /* ---- Status bar ---- */
@@ -129,7 +114,6 @@ body,
 .app-shell .card-title-row h3,
 .app-shell .evidence-card h3,
 .app-shell .evidence-card h4,
-.app-shell .candidate-workbench h3,
 .app-shell .map-verification-section h3 {
   color: #f3f7fc;
 }
@@ -362,8 +346,7 @@ body,
 .app-shell .distribution-card,
 .app-shell .field-checklist,
 .app-shell .evidence-card,
-.app-shell .candidate,
-.app-shell .candidate-table-wrap {
+.app-shell .candidate {
   border-color: #27344c;
   background: #131c2e;
 }
@@ -598,36 +581,6 @@ body,
   color: #6ee7b7;
 }
 
-/* ---- Comparison table ---- */
-.app-shell .candidate-comparison-table th,
-.app-shell .candidate-comparison-table td {
-  border-bottom-color: #243149;
-  color: #d4deec;
-}
-
-.app-shell .candidate-comparison-table thead th {
-  color: #93a3bd;
-  background: #101a2c;
-}
-
-.app-shell .candidate-comparison-table th small {
-  color: #8294ad;
-}
-
-.app-shell .candidate-comparison-table tbody tr.review-confirmed {
-  background: #0f2b2a;
-}
-
-.app-shell .candidate-comparison-table tbody tr.review-excluded {
-  background: #2a1416;
-  color: #f4b7b0;
-}
-
-.app-shell .candidate-comparison-table tbody tr.selected-candidate-row {
-  background: #102a33;
-  box-shadow: inset 3px 0 0 #2dd4bf;
-}
-
 .app-shell .score-meter {
   background: #1c293f;
 }
@@ -636,34 +589,8 @@ body,
   background: #2dd4bf;
 }
 
-.app-shell .view-candidate-button {
-  border-color: #1f5a4a;
-  background: #0f2b2a;
-  color: #5eead4;
-}
-
 /* ---- Candidate cards / badges ---- */
 .app-shell .candidate-badges > span:first-child {
-  background: #0f2b2a;
-  color: #6ee7b7;
-}
-
-.app-shell .review-status-pending {
-  background: #1c293f;
-  color: #aebed4;
-}
-
-.app-shell .review-status-keep {
-  background: #2c2410;
-  color: #fcd34d;
-}
-
-.app-shell .review-status-excluded {
-  background: #2a1416;
-  color: #fca5a5;
-}
-
-.app-shell .review-status-confirmed {
   background: #0f2b2a;
   color: #6ee7b7;
 }
@@ -718,6 +645,3 @@ body,
   color: #8294ad;
 }
 
-.app-shell .candidate-comparison-table tbody tr:hover {
-  background: #16223a;
-}

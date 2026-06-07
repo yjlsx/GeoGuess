@@ -2,14 +2,75 @@ import { useId, useMemo, useState } from "react";
 import type { UserScope } from "../shared/types";
 
 type Props = {
+  copy?: ScopeFormCopy;
   value: UserScope;
   onChange: (value: UserScope) => void;
+};
+
+export type ScopeFormCopy = {
+  boundaryModeLabel: string;
+  collapseCountryPicker: string;
+  countryLabel: string;
+  countryPlaceholder: string;
+  customScope: string;
+  dateOrTimeHint: string;
+  east: string;
+  emptyCountryMatch: string;
+  facilityType: string;
+  globalNote: string;
+  globalScope: string;
+  countryScope: string;
+  notes: string;
+  north: string;
+  polygonBoundary: string;
+  polygonCoordinates: string;
+  polygonPlaceholder: string;
+  regionLabel: string;
+  regionPlaceholder: string;
+  rectangleBoundary: string;
+  scopeLabel: string;
+  source: string;
+  south: string;
+  title: string;
+  west: string;
+  expandCountryPicker: string;
 };
 
 type CountryRegionOption = {
   name: string;
   aliases: string[];
 };
+
+const defaultCopy: ScopeFormCopy = {
+  boundaryModeLabel: "范围类型",
+  collapseCountryPicker: "收起国家/地区选择",
+  countryLabel: "国家/地区",
+  countryPlaceholder: "搜索或选择国家/地区",
+  customScope: "自定义范围",
+  dateOrTimeHint: "时间提示",
+  east: "东",
+  emptyCountryMatch: "未匹配，可直接输入",
+  expandCountryPicker: "展开国家/地区选择",
+  facilityType: "设施类型",
+  globalNote: "将在全球范围内生成候选位置，优先按视觉线索缩小范围。",
+  globalScope: "全球",
+  countryScope: "按国家/地区",
+  notes: "备注",
+  north: "北",
+  polygonBoundary: "多边形范围",
+  polygonCoordinates: "多边形坐标",
+  polygonPlaceholder: "每行一个点：纬度, 经度",
+  rectangleBoundary: "矩形范围",
+  regionLabel: "省/州/城市（可选）",
+  regionPlaceholder: "不确定可留空",
+  scopeLabel: "区域范围",
+  source: "来源",
+  south: "南",
+  title: "分析范围",
+  west: "西"
+};
+
+const countryRegionVisibleLimit = 32;
 
 const countryRegionOptions: CountryRegionOption[] = [
   { name: "中国", aliases: ["China", "CN", "PRC", "中国大陆", "Mainland China"] },
@@ -100,10 +161,12 @@ function update(value: UserScope, key: keyof UserScope, next: UserScope[keyof Us
 }
 
 function CountryRegionCombobox({
+  copy,
   value,
   onChange,
   onOpenChange
 }: {
+  copy: ScopeFormCopy;
   value: string;
   onChange: (next: string) => void;
   onOpenChange: (open: boolean) => void;
@@ -114,7 +177,7 @@ function CountryRegionCombobox({
   const filteredOptions = useMemo(() => {
     const query = normalizeSearchText(value);
     if (!query) {
-      return countryRegionOptions.slice(0, 10);
+      return countryRegionOptions.slice(0, countryRegionVisibleLimit);
     }
 
     return countryRegionOptions
@@ -122,7 +185,7 @@ function CountryRegionCombobox({
         const searchTarget = normalizeSearchText([option.name, ...option.aliases].join(" "));
         return searchTarget.includes(query);
       })
-      .slice(0, 10);
+      .slice(0, countryRegionVisibleLimit);
   }, [value]);
 
   function setOpen(next: boolean) {
@@ -137,7 +200,7 @@ function CountryRegionCombobox({
 
   return (
     <label className="field country-combobox-field" htmlFor={inputId}>
-      国家/地区
+      {copy.countryLabel}
       <div className={open ? "country-combobox open" : "country-combobox"}>
         <input
           aria-autocomplete="list"
@@ -164,12 +227,12 @@ function CountryRegionCombobox({
               choose(filteredOptions[0]);
             }
           }}
-          placeholder="搜索或选择国家/地区"
+          placeholder={copy.countryPlaceholder}
           role="combobox"
           value={value}
         />
         <button
-          aria-label={open ? "收起国家/地区选择" : "展开国家/地区选择"}
+          aria-label={open ? copy.collapseCountryPicker : copy.expandCountryPicker}
           className="country-combobox-toggle"
           onClick={() => setOpen(!open)}
           onMouseDown={(event) => event.preventDefault()}
@@ -195,7 +258,7 @@ function CountryRegionCombobox({
                 </button>
               ))
             ) : (
-              <div className="country-combobox-empty">未匹配，可直接输入</div>
+              <div className="country-combobox-empty">{copy.emptyCountryMatch}</div>
             )}
           </div>
         ) : null}
@@ -204,7 +267,7 @@ function CountryRegionCombobox({
   );
 }
 
-export function ScopeForm({ value, onChange }: Props) {
+export function ScopeForm({ copy = defaultCopy, value, onChange }: Props) {
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const box = value.coordinateBox ?? { minLat: 28, minLon: 112, maxLat: 34, maxLon: 118 };
   const regionScope = value.regionScope ?? "country";
@@ -226,53 +289,53 @@ export function ScopeForm({ value, onChange }: Props) {
       <summary className="section-heading compact-heading">
         <span className="step-number">2</span>
         <div>
-          <h2>分析范围</h2>
+          <h2>{copy.title}</h2>
         </div>
       </summary>
       <label className="field">
-        区域范围
+        {copy.scopeLabel}
         <select value={regionScope} onChange={(event) => onChange(update(value, "regionScope", event.target.value))}>
-          <option value="country">按国家/地区</option>
-          <option value="custom">自定义范围</option>
-          <option value="global">全球</option>
+          <option value="country">{copy.countryScope}</option>
+          <option value="custom">{copy.customScope}</option>
+          <option value="global">{copy.globalScope}</option>
         </select>
       </label>
       {regionScope === "custom" ? (
         <>
-          <div className="segment-control" aria-label="范围类型">
+          <div className="segment-control" aria-label={copy.boundaryModeLabel}>
             <button className={boundaryMode === "rectangle" ? "active" : ""} type="button" onClick={() => onChange({ ...value, boundaryMode: "rectangle" })}>
-              矩形范围
+              {copy.rectangleBoundary}
             </button>
             <button className={boundaryMode === "polygon" ? "active" : ""} type="button" onClick={() => onChange({ ...value, boundaryMode: "polygon" })}>
-              多边形范围
+              {copy.polygonBoundary}
             </button>
           </div>
           {boundaryMode === "rectangle" ? (
             <div className="scope-grid coordinate-box-grid">
               <label className="field">
-                西
+                {copy.west}
                 <input value={box.minLon.toFixed(6)} onChange={(event) => onChange(updateBox("minLon", event.target.value))} />
               </label>
               <label className="field">
-                东
+                {copy.east}
                 <input value={box.maxLon.toFixed(6)} onChange={(event) => onChange(updateBox("maxLon", event.target.value))} />
               </label>
               <label className="field">
-                南
+                {copy.south}
                 <input value={box.minLat.toFixed(6)} onChange={(event) => onChange(updateBox("minLat", event.target.value))} />
               </label>
               <label className="field">
-                北
+                {copy.north}
                 <input value={box.maxLat.toFixed(6)} onChange={(event) => onChange(updateBox("maxLat", event.target.value))} />
               </label>
             </div>
           ) : (
             <label className="field polygon-field">
-              多边形坐标
+              {copy.polygonCoordinates}
               <textarea
                 value={value.polygonCoordinates ?? ""}
                 onChange={(event) => onChange(update(value, "polygonCoordinates", event.target.value))}
-                placeholder="每行一个点：纬度, 经度"
+                placeholder={copy.polygonPlaceholder}
               />
             </label>
           )}
@@ -281,31 +344,32 @@ export function ScopeForm({ value, onChange }: Props) {
       {regionScope === "country" ? (
         <div className="scope-grid scope-extra-grid">
           <CountryRegionCombobox
+            copy={copy}
             value={value.country ?? ""}
             onChange={(next) => onChange(update(value, "country", next))}
             onOpenChange={setCountryPickerOpen}
           />
           <label className="field">
-            省/州/城市（可选）
+            {copy.regionLabel}
             <input
               value={value.region ?? ""}
               onChange={(event) => onChange(update(value, "region", event.target.value))}
-              placeholder="不确定可留空"
+              placeholder={copy.regionPlaceholder}
             />
           </label>
           <label className="field">
-            设施类型
+            {copy.facilityType}
             <input
               value={value.facilityType ?? ""}
               onChange={(event) => onChange(update(value, "facilityType", event.target.value))}
             />
           </label>
           <label className="field">
-            来源
+            {copy.source}
             <input value={value.source ?? ""} onChange={(event) => onChange(update(value, "source", event.target.value))} />
           </label>
           <label className="field scope-grid-wide">
-            时间提示
+            {copy.dateOrTimeHint}
             <input
               value={value.dateOrTimeHint ?? ""}
               onChange={(event) => onChange(update(value, "dateOrTimeHint", event.target.value))}
@@ -313,9 +377,9 @@ export function ScopeForm({ value, onChange }: Props) {
           </label>
         </div>
       ) : null}
-      {regionScope === "global" ? <p className="scope-mode-note">将在全球范围内生成候选位置，优先按视觉线索缩小范围。</p> : null}
+      {regionScope === "global" ? <p className="scope-mode-note">{copy.globalNote}</p> : null}
       <label className="field scope-note-field">
-        备注
+        {copy.notes}
         <textarea value={value.notes ?? ""} onChange={(event) => onChange(update(value, "notes", event.target.value))} />
       </label>
     </details>

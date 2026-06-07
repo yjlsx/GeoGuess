@@ -1,3 +1,4 @@
+import { cleanClueText, hasMapVerifiableWord, isKnownMediaSource, isMediaOverlayOnly } from "./clueClassification";
 import type { ExtractedClues, SearchQuery, UserScope } from "./types";
 
 function compact(parts: Array<string | undefined>) {
@@ -15,25 +16,23 @@ function pushUnique(queries: SearchQuery[], seen: Set<string>, item: SearchQuery
 function sourceTerms(scope: UserScope, clues: ExtractedClues) {
   return new Set(
     compact([scope.source, ...clues.visibleLabels])
-      .map((item) => item.replace(/\.[a-z]+$/i, "").trim().toLocaleLowerCase())
+      .map((item) => cleanClueText(item).replace(/\.[a-z]+$/i, "").toLocaleLowerCase())
       .filter(Boolean)
   );
 }
 
-function isKnownMediaSource(text: string) {
-  return /^(cctv|cctv\s*\d+|cctv\.com|央视|央视网|国防军事)$/i.test(text.trim());
-}
-
 function isSourceOnly(text: string, sources: Set<string>) {
-  const normalized = text.replace(/\.[a-z]+$/i, "").trim().toLocaleLowerCase();
-  return !normalized || sources.has(normalized) || isKnownMediaSource(text);
+  const normalized = cleanClueText(text).replace(/\.[a-z]+$/i, "").toLocaleLowerCase();
+  return !normalized || sources.has(normalized) || isKnownMediaSource(text) || isMediaOverlayOnly(text);
 }
 
 function sourceLookupTerms(scope: UserScope, clues: ExtractedClues) {
   return [...new Set(compact([
     scope.source,
-    ...clues.visibleLabels,
-    ...clues.ocrText.filter((text) => /cctv|央视|国防|军事|报道|新闻|20\d{2}|年度|训练|演习|拉开大幕/i.test(text))
+    ...clues.visibleLabels.filter((text) => !isMediaOverlayOnly(text)),
+    ...clues.ocrText.filter(
+      (text) => !isMediaOverlayOnly(text) && /cctv|央视|国防|军事|报道|新闻|20\d{2}|年度|训练|演习|拉开大幕/i.test(text)
+    )
   ]))].slice(0, 10);
 }
 
@@ -68,6 +67,20 @@ function physicalFeatureBundles(visualFeatures: string[], spatialFeatures: strin
   return bundles.map((bundle) => compact(bundle)).filter((bundle) => bundle.length >= 2);
 }
 
+function mapImageryTerms(visualFeatures: string[]) {
+  const terms = visualFeatures.filter(hasMapVerifiableWord);
+  return terms.length > 0 ? terms.slice(0, 5) : visualFeatures.slice(0, 4);
+}
+
+function viewpointGeometryTerms(spatialFeatures: string[]) {
+  const terms = spatialFeatures.filter((feature) =>
+    /(camera|view|looking|facing|foreground|background|behind|beside|left|right|north|south|east|west|horizontal|parallel|perpendicular|视角|镜头|前景|背景|后方|旁边|左|右|朝|向|平行|垂直)/i.test(
+      feature
+    )
+  );
+  return terms.length > 0 ? terms.slice(0, 4) : spatialFeatures.slice(0, 3);
+}
+
 export function buildSearchQueries(scope: UserScope, clues: ExtractedClues): SearchQuery[] {
   const queries: SearchQuery[] = [];
   const seen = new Set<string>();
@@ -92,6 +105,24 @@ export function buildSearchQueries(scope: UserScope, clues: ExtractedClues): Sea
     language: "en",
     purpose: "visual-feature-bundle"
   });
+
+  const imageryTerms = mapImageryTerms(visualFeatures);
+  if (imageryTerms.length >= 2) {
+    pushUnique(queries, seen, {
+      query: compact([place, facility, "satellite map", ...imageryTerms]).join(" "),
+      language: "en",
+      purpose: "map-imagery-verification"
+    });
+  }
+
+  const geometryTerms = viewpointGeometryTerms(spatialFeatures);
+  if (geometryTerms.length >= 1) {
+    pushUnique(queries, seen, {
+      query: compact([place, facility, "camera viewpoint", ...geometryTerms, ...visualFeatures.slice(0, 2)]).join(" "),
+      language: geometryTerms.some((term) => /[一-龿]/.test(term)) ? "zh" : "en",
+      purpose: "viewpoint-geometry"
+    });
+  }
 
   if (sourceTermsForLookup.length > 0 || ocrHeadlineTerms.length > 0) {
     pushUnique(queries, seen, {

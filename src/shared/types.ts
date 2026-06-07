@@ -28,8 +28,15 @@ export type VisionModelConfig = {
   model?: string;
   matchingThreshold?: number;
   maxCandidates?: number;
+  showLowConfidenceCandidates?: boolean;
+  maxLowConfidenceCandidates?: number;
   coordinateSystem?: "WGS84 (EPSG:4326)" | "GCJ-02" | "BD-09";
-  terrainValidation?: boolean;
+};
+
+export type VisionConfigProfile = {
+  id: string;
+  name: string;
+  config: VisionModelConfig;
 };
 
 export type ExtractedClues = {
@@ -81,6 +88,39 @@ export type SourceEvidence = {
   note: string;
 };
 
+export type EvidenceImageAttachment = {
+  name: string;
+  dataUrl: string;
+  mediaType: string;
+};
+
+export type FeatureMatchAiVerification = {
+  status: "supports" | "contradicts" | "inconclusive";
+  confidence: Confidence;
+  rationale: string;
+  checkedAt?: string;
+  model?: string;
+};
+
+export type FeatureMatch = {
+  imageFeature: string;
+  mapFeature: string;
+  verification: string;
+  imageAnnotation?: string;
+  mapAnnotation?: string;
+  evidenceLink?: string;
+  mapScreenshotUrl?: string;
+  mapScreenshotAttachment?: EvidenceImageAttachment;
+  earthImageDate?: string;
+  aiVerification?: FeatureMatchAiVerification;
+  status: "matched" | "partial" | "unverified" | "mismatch";
+};
+
+export type CandidateManualVerdict = {
+  status: "unreviewed" | "confirmed" | "kept" | "excluded";
+  rationale?: string;
+};
+
 export type OsintLink = {
   title: string;
   url: string;
@@ -95,6 +135,8 @@ export type Candidate = {
   confidence: Confidence;
   matchScore?: number;
   matchedFeatures?: string[];
+  featureMatches?: FeatureMatch[];
+  manualVerdict?: CandidateManualVerdict;
   missingOrUnverifiedFeatures?: string[];
   viewpointNotes?: string[];
   mapLinks: {

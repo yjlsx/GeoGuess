@@ -1,46 +1,34 @@
 import { useEffect, useState } from "react";
 import { CandidateResults } from "./components/CandidateResults";
-import { ConfigPanel } from "./components/ConfigPanel";
-import { ImageInput } from "./components/ImageInput";
-import { ScopeForm } from "./components/ScopeForm";
+import { ConfigPanel, type ConfigPanelCopy } from "./components/ConfigPanel";
+import { ImageInput, type ImageInputCopy } from "./components/ImageInput";
+import { ScopeForm, type ScopeFormCopy } from "./components/ScopeForm";
+import { scoreAndRankCandidates } from "./shared/candidateScoring";
 import { buildReports } from "./shared/reportGenerator";
-import {
-  copyReportToClipboard,
-  exportReportAsHtml,
-  exportReportAsMarkdown,
-  printReport
-} from "./shared/reportExport";
-import { sampleInvestigationInput } from "./shared/sampleInvestigation";
-import type { CropMode, Investigation, OutputLanguage, UserScope, VisionModelConfig } from "./shared/types";
+import type { CandidateManualVerdict, CropMode, FeatureMatch, Investigation, OutputLanguage, UserScope, VisionConfigProfile, VisionModelConfig } from "./shared/types";
 
 const settingsStorageKey = "imageGeoFinder.settings";
-const historyStorageKey = "imageGeoFinder.history";
 const latestInvestigationStorageKey = "imageGeoFinder.latestInvestigation";
-const historyLimit = 12;
 const defaultScope: UserScope = {
   regionScope: "country",
   boundaryMode: "rectangle",
   coordinateBox: { minLat: 28, minLon: 112, maxLat: 34, maxLon: 118 }
 };
+const defaultVisionProfileId = "default-profile";
+const defaultVisionConfig: VisionModelConfig = {
+  model: "gpt-4o",
+  matchingThreshold: 0.6,
+  maxCandidates: 10,
+  showLowConfidenceCandidates: true,
+  maxLowConfidenceCandidates: 10,
+  coordinateSystem: "WGS84 (EPSG:4326)"
+};
 
 type SavedSettings = {
   outputLanguage?: OutputLanguage;
   visionConfig?: VisionModelConfig;
-};
-
-type LegacyVisionModelConfig = VisionModelConfig & {
-  apiKey?: string;
-  baseUrl?: string;
-};
-
-type HistoryItem = {
-  id: string;
-  assetName: string;
-  candidateCount: number;
-  createdAt: string;
-  investigation?: Investigation;
-  analysisStartedAt?: number | null;
-  analysisFinishedAt?: number | null;
+  visionProfiles?: VisionConfigProfile[];
+  activeVisionProfileId?: string;
 };
 
 type SavedInvestigationState = {
@@ -48,25 +36,238 @@ type SavedInvestigationState = {
   analysisStartedAt: number | null;
   analysisFinishedAt: number | null;
 };
+type FeatureMatchStatus = NonNullable<Investigation["candidates"][number]["featureMatches"]>[number]["status"];
+type CandidateManualVerdictStatus = CandidateManualVerdict["status"];
 
-function formatHistoryDate(value: string | number | null | undefined) {
-  if (!value) {
-    return "时间未知";
+type AppCopy = {
+  analyze: string;
+  analyzing: (progress: number) => string;
+  brandSubtitle: string;
+  commandMetaLabel: string;
+  configPanel: ConfigPanelCopy;
+  errors: {
+    analysisFailed: string;
+    noApiKey: string;
+    noFile: string;
+    requestFailed: (status?: number) => string;
+  };
+  fetchModels: {
+    empty: string;
+    failed: string;
+    missingApiKey: string;
+    success: (count: number) => string;
+  };
+  imageInput: ImageInputCopy;
+  interfaceLanguageLabel: string;
+  navLabel: string;
+  projectLabel: string;
+  reset: string;
+  saveStatus: string;
+  scopeForm: ScopeFormCopy;
+  statusAnalyzing: string;
+  statusLabel: string;
+  statusReady: string;
+  statusStandby: string;
+  workflowSidebarLabel: string;
+  workflowSrOnly: string;
+};
+
+const uiCopy: Record<OutputLanguage, AppCopy> = {
+  "zh-CN": {
+    analyze: "开始分析",
+    analyzing: (progress) => `分析中 ${progress}%`,
+    brandSubtitle: "OSINT 地理定位调查指挥中心",
+    commandMetaLabel: "项目状态",
+    configPanel: {
+      addProfile: "新增配置",
+      configName: "配置名称",
+      deleteProfile: "删除配置",
+      description: "模型、Base URL 和 API Key 可按配置档案保存在本机浏览器。",
+      heading: "配置",
+      modelConfig: "模型配置",
+      saveButton: "保存配置",
+      unnamedConfig: "未命名配置",
+      visionModelSettings: {
+        apiKeyLabel: "视觉模型 API Key",
+        apiKeyPlaceholder: "随当前模型配置保存在本机浏览器",
+        baseUrlLabel: "视觉模型 Base URL",
+        baseUrlPlaceholder: "可留空，或填写自己的兼容接口",
+        coordinateSystem: "坐标系",
+        fetchModels: "获取模型列表",
+        fetchingModels: "获取中...",
+        hint: "系统会用视觉模型自动识别 OCR、地物语义、军事/交通设施和空间关系。",
+        lowConfidenceMax: "低置信最多展示",
+        maxCandidates: "最大候选数",
+        modelName: "视觉模型名称",
+        showLowConfidence: "展示低置信候选",
+        subtitle: "自动识别 OCR、地物、设施和空间关系。",
+        threshold: "匹配阈值",
+        title: "视觉模型"
+      }
+    },
+    errors: {
+      analysisFailed: "分析失败",
+      noApiKey: "请先填写视觉模型 API Key，系统需要视觉模型自动识别图片线索。",
+      noFile: "请先上传图片或视频。",
+      requestFailed: (status) => (status ? `请求失败（HTTP ${status}）` : "请求失败")
+    },
+    fetchModels: {
+      empty: "接口未返回可用模型，可手动填写模型名。",
+      failed: "模型列表获取失败",
+      missingApiKey: "请先填写 API Key。",
+      success: (count) => `已获取 ${count} 个模型`
+    },
+    imageInput: {
+      assetCountUnit: "个素材",
+      clearFile: "清除文件",
+      fileInputLabel: "上传图片",
+      fileSizeFallback: "2024-05-16 17:45:32 | 2.6 MB",
+      hint: "可上传多张连续截图或一小段视频，系统会合并可见地物、站台、建筑、道路和视角线索。",
+      maxSize: "最大 200MB",
+      notesLabel: "附加信息（可选）",
+      notesPlaceholder: "输入事件描述、来源链接、备注等...",
+      supportedFormats: "支持 JPG, PNG, WEBP, MP4, MOV",
+      title: "上传与输入",
+      uploadCta: "点击或拖拽文件到此处"
+    },
+    interfaceLanguageLabel: "界面语言",
+    navLabel: "工作台导航",
+    projectLabel: "项目：",
+    reset: "重置",
+    saveStatus: "配置已保存到本机浏览器。",
+    scopeForm: {
+      boundaryModeLabel: "范围类型",
+      collapseCountryPicker: "收起国家/地区选择",
+      countryLabel: "国家/地区",
+      countryPlaceholder: "搜索或选择国家/地区",
+      customScope: "自定义范围",
+      dateOrTimeHint: "时间提示",
+      east: "东",
+      emptyCountryMatch: "未匹配，可直接输入",
+      expandCountryPicker: "展开国家/地区选择",
+      facilityType: "设施类型",
+      globalNote: "将在全球范围内生成候选位置，优先按视觉线索缩小范围。",
+      globalScope: "全球",
+      countryScope: "按国家/地区",
+      notes: "备注",
+      north: "北",
+      polygonBoundary: "多边形范围",
+      polygonCoordinates: "多边形坐标",
+      polygonPlaceholder: "每行一个点：纬度, 经度",
+      rectangleBoundary: "矩形范围",
+      regionLabel: "省/州/城市（可选）",
+      regionPlaceholder: "不确定可留空",
+      scopeLabel: "区域范围",
+      source: "来源",
+      south: "南",
+      title: "分析范围",
+      west: "西"
+    },
+    statusAnalyzing: "分析中",
+    statusLabel: "状态：",
+    statusReady: "已就绪",
+    statusStandby: "待命",
+    workflowSidebarLabel: "分析控制栏",
+    workflowSrOnly: "自动识别 OCR / 地物 / 设施 / 空间关系"
+  },
+  "en-US": {
+    analyze: "Analyze",
+    analyzing: (progress) => `Analyzing ${progress}%`,
+    brandSubtitle: "OSINT geolocation investigation command center",
+    commandMetaLabel: "Project status",
+    configPanel: {
+      addProfile: "Add profile",
+      configName: "Profile name",
+      deleteProfile: "Delete profile",
+      description: "Model, Base URL, and API key are saved per local browser profile.",
+      heading: "Configuration",
+      modelConfig: "Model profile",
+      saveButton: "Save config",
+      unnamedConfig: "Unnamed profile",
+      visionModelSettings: {
+        apiKeyLabel: "Vision model API key",
+        apiKeyPlaceholder: "Saved with the active model profile in this browser",
+        baseUrlLabel: "Vision model Base URL",
+        baseUrlPlaceholder: "Leave empty or use your compatible endpoint",
+        coordinateSystem: "Coordinate system",
+        fetchModels: "Fetch models",
+        fetchingModels: "Fetching...",
+        hint: "The vision model extracts OCR, map features, facility clues, and spatial relationships.",
+        lowConfidenceMax: "Low-confidence limit",
+        maxCandidates: "Max candidates",
+        modelName: "Vision model name",
+        showLowConfidence: "Show low-confidence candidates",
+        subtitle: "Extract OCR, features, facilities, and spatial relationships.",
+        threshold: "Match threshold",
+        title: "Vision model"
+      }
+    },
+    errors: {
+      analysisFailed: "Analysis failed",
+      noApiKey: "Add a vision model API key first so the system can extract image clues.",
+      noFile: "Upload an image or video first.",
+      requestFailed: (status) => (status ? `Request failed (HTTP ${status})` : "Request failed")
+    },
+    fetchModels: {
+      empty: "The endpoint returned no usable models. You can enter a model name manually.",
+      failed: "Model list fetch failed",
+      missingApiKey: "Add an API key first.",
+      success: (count) => `Fetched ${count} models`
+    },
+    imageInput: {
+      assetCountUnit: "assets",
+      clearFile: "Clear file",
+      fileInputLabel: "Upload image",
+      fileSizeFallback: "2024-05-16 17:45:32 | 2.6 MB",
+      hint: "Upload multiple consecutive screenshots or a short video so the system can merge visible features, platforms, buildings, roads, and viewpoint clues.",
+      maxSize: "Max 200MB",
+      notesLabel: "Additional info (optional)",
+      notesPlaceholder: "Enter event details, source links, notes...",
+      supportedFormats: "Supports JPG, PNG, WEBP, MP4, MOV",
+      title: "Upload & input",
+      uploadCta: "Click or drag files here"
+    },
+    interfaceLanguageLabel: "Interface language",
+    navLabel: "Workbench navigation",
+    projectLabel: "Project:",
+    reset: "Reset",
+    saveStatus: "Configuration saved to this browser.",
+    scopeForm: {
+      boundaryModeLabel: "Scope type",
+      collapseCountryPicker: "Collapse country/region selector",
+      countryLabel: "Country/region",
+      countryPlaceholder: "Search or choose a country/region",
+      customScope: "Custom area",
+      dateOrTimeHint: "Time hint",
+      east: "East",
+      emptyCountryMatch: "No match. You can type directly.",
+      expandCountryPicker: "Expand country/region selector",
+      facilityType: "Facility type",
+      globalNote: "Candidates will be generated globally and narrowed by visual clues first.",
+      globalScope: "Global",
+      countryScope: "By country/region",
+      notes: "Notes",
+      north: "North",
+      polygonBoundary: "Polygon area",
+      polygonCoordinates: "Polygon coordinates",
+      polygonPlaceholder: "One point per line: latitude, longitude",
+      rectangleBoundary: "Rectangle area",
+      regionLabel: "Province/state/city (optional)",
+      regionPlaceholder: "Leave blank if unsure",
+      scopeLabel: "Region scope",
+      source: "Source",
+      south: "South",
+      title: "Analysis scope",
+      west: "West"
+    },
+    statusAnalyzing: "Analyzing",
+    statusLabel: "Status:",
+    statusReady: "Ready",
+    statusStandby: "Standby",
+    workflowSidebarLabel: "Analysis controls",
+    workflowSrOnly: "Extract OCR / features / facilities / spatial relationships"
   }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "时间未知";
-  }
-
-  return new Intl.DateTimeFormat("zh-CN", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(date);
-}
+};
 
 function estimateAnalysisProgress(startedAt: number, now: number) {
   const elapsedSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
@@ -89,13 +290,60 @@ function getAssetName(investigation: Investigation) {
   return investigation.image.originalPath.split(/[\\/]/).pop() ?? "未命名素材";
 }
 
-function bestCandidateName(investigation: Investigation | null) {
-  return investigation?.candidates[0]?.name ?? "无候选名称";
+function normalizeVisionConfig(config?: VisionModelConfig): VisionModelConfig {
+  return {
+    ...defaultVisionConfig,
+    apiKey: config?.apiKey,
+    baseUrl: config?.baseUrl,
+    model: config?.model ?? defaultVisionConfig.model,
+    matchingThreshold: config?.matchingThreshold ?? defaultVisionConfig.matchingThreshold,
+    maxCandidates: config?.maxCandidates ?? defaultVisionConfig.maxCandidates,
+    showLowConfidenceCandidates: config?.showLowConfidenceCandidates ?? defaultVisionConfig.showLowConfidenceCandidates,
+    maxLowConfidenceCandidates: config?.maxLowConfidenceCandidates ?? defaultVisionConfig.maxLowConfidenceCandidates,
+    coordinateSystem: config?.coordinateSystem ?? defaultVisionConfig.coordinateSystem
+  };
 }
 
-function bestCandidateScore(investigation: Investigation | null) {
-  const score = investigation?.candidates[0]?.matchScore;
-  return typeof score === "number" ? `${Math.round(score * 100)}%` : "--";
+function normalizeVisionProfiles(settings: SavedSettings): VisionConfigProfile[] {
+  if (Array.isArray(settings.visionProfiles)) {
+    const profiles = settings.visionProfiles
+      .filter((profile) => profile && typeof profile.id === "string" && profile.config && typeof profile.config === "object")
+      .map((profile, index) => ({
+        id: profile.id || `profile-${index + 1}`,
+        name: typeof profile.name === "string" && profile.name.trim() ? profile.name.trim() : `配置 ${index + 1}`,
+        config: normalizeVisionConfig(profile.config)
+      }));
+
+    if (profiles.length > 0) {
+      return profiles;
+    }
+  }
+
+  if (settings.visionConfig && typeof settings.visionConfig === "object") {
+    return [
+      {
+        id: defaultVisionProfileId,
+        name: "默认配置",
+        config: normalizeVisionConfig(settings.visionConfig)
+      }
+    ];
+  }
+
+  return [
+    {
+      id: defaultVisionProfileId,
+      name: "默认配置",
+      config: normalizeVisionConfig()
+    }
+  ];
+}
+
+function resolveActiveVisionProfileId(profiles: VisionConfigProfile[], savedActiveId?: string) {
+  return profiles.some((profile) => profile.id === savedActiveId) ? savedActiveId ?? profiles[0].id : profiles[0].id;
+}
+
+function syncActiveProfileConfig(profiles: VisionConfigProfile[], activeProfileId: string, config: VisionModelConfig) {
+  return profiles.map((profile) => (profile.id === activeProfileId ? { ...profile, config: normalizeVisionConfig(config) } : profile));
 }
 
 function loadSavedSettings(): SavedSettings {
@@ -105,38 +353,17 @@ function loadSavedSettings(): SavedSettings {
       return {};
     }
     const parsed = JSON.parse(raw) as SavedSettings;
-    const savedVisionConfig = parsed.visionConfig && typeof parsed.visionConfig === "object" ? (parsed.visionConfig as LegacyVisionModelConfig) : undefined;
-    const { apiKey: _apiKey, baseUrl: _baseUrl, ...safeVisionConfig } = savedVisionConfig ?? {};
+    const visionProfiles = normalizeVisionProfiles(parsed);
+    const activeVisionProfileId = resolveActiveVisionProfileId(visionProfiles, parsed.activeVisionProfileId);
+    const activeProfile = visionProfiles.find((profile) => profile.id === activeVisionProfileId) ?? visionProfiles[0];
     return {
       outputLanguage: parsed.outputLanguage === "en-US" || parsed.outputLanguage === "zh-CN" ? parsed.outputLanguage : undefined,
-      visionConfig: savedVisionConfig ? safeVisionConfig : undefined
+      visionConfig: activeProfile.config,
+      visionProfiles,
+      activeVisionProfileId
     };
   } catch {
     return {};
-  }
-}
-
-function loadHistory(): HistoryItem[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(historyStorageKey) ?? "[]") as HistoryItem[];
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .filter((entry) => entry && typeof entry.id === "string" && typeof entry.assetName === "string")
-      .map((entry) => ({
-        id: entry.id,
-        assetName: entry.assetName,
-        candidateCount: typeof entry.candidateCount === "number" ? entry.candidateCount : entry.investigation?.candidates.length ?? 0,
-        createdAt: typeof entry.createdAt === "string" ? entry.createdAt : new Date().toISOString(),
-        investigation: entry.investigation,
-        analysisStartedAt: typeof entry.analysisStartedAt === "number" ? entry.analysisStartedAt : null,
-        analysisFinishedAt: typeof entry.analysisFinishedAt === "number" ? entry.analysisFinishedAt : null
-      }))
-      .slice(0, historyLimit);
-  } catch {
-    return [];
   }
 }
 
@@ -155,49 +382,6 @@ function loadLatestInvestigation(): SavedInvestigationState | null {
   } catch {
     return null;
   }
-}
-
-function buildSampleInvestigation(outputLanguage: OutputLanguage): Investigation {
-  const reportInput = {
-    ...sampleInvestigationInput,
-    outputLanguage
-  };
-
-  return {
-    id: "sample-investigation",
-    outputLanguage,
-    image: {
-      originalPath: "local://IMG_20240516_174532.jpg",
-      cropMode: "full"
-    },
-    userScope: sampleInvestigationInput.userScope,
-    extractedClues: sampleInvestigationInput.extractedClues,
-    mapFeatureProfile: sampleInvestigationInput.mapFeatureProfile ?? {
-      primaryFeatures: [],
-      spatialRelationships: [],
-      viewpointConstraints: [],
-      auxiliaryTextClues: [],
-      excludedSourceOnlyClues: [],
-      searchInstruction: ""
-    },
-    metadataEvidence: sampleInvestigationInput.metadataEvidence ?? [],
-    searchQueries: sampleInvestigationInput.searchQueries,
-    searchProcess: sampleInvestigationInput.searchProcess ?? [],
-    imageAnalysis: sampleInvestigationInput.imageAnalysis ?? {
-      recognitionMode: "local-metadata",
-      observations: [],
-      limitations: []
-    },
-    seasonalAnalysis: sampleInvestigationInput.seasonalAnalysis ?? {
-      captureDateHint: "",
-      inferredSeason: "未提供",
-      confidence: "low",
-      reasoning: [],
-      mapComparisonNotes: []
-    },
-    candidates: sampleInvestigationInput.candidates,
-    report: buildReports(reportInput)
-  };
 }
 
 function buildRequestScope(scope: UserScope): UserScope {
@@ -275,46 +459,69 @@ async function getResponseErrorMessage(response: Response) {
   return response.status ? `请求失败（HTTP ${response.status}）` : "请求失败";
 }
 
+function refreshInvestigationReport(investigation: Investigation): Investigation {
+  return {
+    ...investigation,
+    report: buildReports({
+      outputLanguage: investigation.outputLanguage,
+      userScope: investigation.userScope,
+      extractedClues: investigation.extractedClues,
+      mapFeatureProfile: investigation.mapFeatureProfile,
+      metadataEvidence: investigation.metadataEvidence,
+      searchQueries: investigation.searchQueries,
+      searchProcess: investigation.searchProcess,
+      imageAnalysis: investigation.imageAnalysis,
+      seasonalAnalysis: investigation.seasonalAnalysis,
+      candidates: investigation.candidates
+    })
+  };
+}
+
+function rescoreInvestigationCandidates(investigation: Investigation): Investigation {
+  return refreshInvestigationReport({
+    ...investigation,
+    candidates: scoreAndRankCandidates(investigation.candidates, {
+      clues: investigation.extractedClues,
+      mapFeatureProfile: investigation.mapFeatureProfile,
+      userScope: investigation.userScope
+    })
+  });
+}
+
 export default function App() {
   const savedSettings = loadSavedSettings();
   const savedInvestigation = loadLatestInvestigation();
+  const restoredInvestigation = savedInvestigation?.investigation ? rescoreInvestigationCandidates(savedInvestigation.investigation) : null;
+  const initialVisionProfiles = savedSettings.visionProfiles ?? normalizeVisionProfiles(savedSettings);
+  const initialActiveVisionProfileId = savedSettings.activeVisionProfileId ?? resolveActiveVisionProfileId(initialVisionProfiles);
+  const initialVisionConfig =
+    initialVisionProfiles.find((profile) => profile.id === initialActiveVisionProfileId)?.config ?? normalizeVisionConfig(savedSettings.visionConfig);
   const [files, setFiles] = useState<File[]>([]);
   const [assetPreviewUrls, setAssetPreviewUrls] = useState<string[]>([]);
   const cropMode: CropMode = "full";
   const [outputLanguage, setOutputLanguage] = useState<OutputLanguage>(savedSettings.outputLanguage ?? "zh-CN");
-  const [visionConfig, setVisionConfig] = useState<VisionModelConfig>(
-    savedSettings.visionConfig ?? {
-      model: "gpt-4o",
-      matchingThreshold: 0.6,
-      maxCandidates: 10,
-      coordinateSystem: "WGS84 (EPSG:4326)",
-      terrainValidation: true
-    }
-  );
+  const [visionProfiles, setVisionProfiles] = useState<VisionConfigProfile[]>(initialVisionProfiles);
+  const [activeVisionProfileId, setActiveVisionProfileId] = useState(initialActiveVisionProfileId);
+  const [visionConfig, setVisionConfig] = useState<VisionModelConfig>(initialVisionConfig);
   const [scope, setScope] = useState<UserScope>(defaultScope);
-  const [investigation, setInvestigation] = useState<Investigation | null>(savedInvestigation?.investigation ?? null);
-  const [comparisonInvestigation, setComparisonInvestigation] = useState<Investigation | null>(null);
+  const [investigation, setInvestigation] = useState<Investigation | null>(restoredInvestigation);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
-  const [exportStatus, setExportStatus] = useState<string | null>(null);
-  const [historyStatus, setHistoryStatus] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [modelListStatus, setModelListStatus] = useState<string | null>(null);
   const [modelListLoading, setModelListLoading] = useState(false);
   const [analysisStartedAt, setAnalysisStartedAt] = useState<number | null>(savedInvestigation?.analysisStartedAt ?? null);
   const [analysisFinishedAt, setAnalysisFinishedAt] = useState<number | null>(savedInvestigation?.analysisFinishedAt ?? null);
-  const [analysisProgress, setAnalysisProgress] = useState(savedInvestigation?.investigation ? 100 : 0);
+  const [analysisProgress, setAnalysisProgress] = useState(restoredInvestigation ? 100 : 0);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [activeMenu, setActiveMenu] = useState<"project" | "history" | "user" | null>(null);
-  const [history, setHistory] = useState<HistoryItem[]>(loadHistory);
   const hasVisionKey = Boolean(visionConfig.apiKey?.trim());
-  const candidateCount = investigation?.candidates.length ?? 0;
   const assetName = files[0]?.name ?? (investigation ? getAssetName(investigation) : null);
   const selectedModelName = visionConfig.model?.trim() || "gpt-4o";
   const primaryAssetPreviewUrl = assetPreviewUrls[0] ?? null;
   const primaryAssetMediaType = files[0]?.type ?? null;
+  const copy = uiCopy[outputLanguage];
 
   useEffect(() => {
     if (files.length === 0 || typeof URL.createObjectURL !== "function") {
@@ -328,6 +535,12 @@ export default function App() {
       urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [files]);
+
+  useEffect(() => {
+    if (restoredInvestigation) {
+      rememberLatestInvestigation(restoredInvestigation, analysisStartedAt, analysisFinishedAt);
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading || !analysisStartedAt) {
@@ -350,10 +563,7 @@ export default function App() {
   function handleFileChange(nextFiles: File[]) {
     setFiles(nextFiles);
     setInvestigation(null);
-    setComparisonInvestigation(null);
     setError(null);
-    setExportStatus(null);
-    setHistoryStatus(null);
     setAnalysisStartedAt(null);
     setAnalysisFinishedAt(null);
     setAnalysisProgress(0);
@@ -362,27 +572,6 @@ export default function App() {
 
   function updateNotes(notes: string) {
     setScope((current) => ({ ...current, notes: notes || undefined }));
-  }
-
-  function persistHistory(nextHistory: HistoryItem[]) {
-    localStorage.setItem(historyStorageKey, JSON.stringify(nextHistory));
-  }
-
-  function rememberInvestigation(nextInvestigation: Investigation, startedAt: number | null, finishedAt: number | null) {
-    const item: HistoryItem = {
-      id: nextInvestigation.id,
-      assetName: getAssetName(nextInvestigation),
-      candidateCount: nextInvestigation.candidates.length,
-      createdAt: nextInvestigation.report?.createdAt || new Date().toISOString(),
-      investigation: nextInvestigation,
-      analysisStartedAt: startedAt,
-      analysisFinishedAt: finishedAt
-    };
-    setHistory((current) => {
-      const nextHistory = [item, ...current.filter((entry) => entry.id !== item.id)].slice(0, historyLimit);
-      persistHistory(nextHistory);
-      return nextHistory;
-    });
   }
 
   function rememberLatestInvestigation(nextInvestigation: Investigation, startedAt: number | null, finishedAt: number | null) {
@@ -396,84 +585,183 @@ export default function App() {
     );
   }
 
-  function restoreHistoryItem(entry: HistoryItem) {
-    if (!entry.investigation) {
-      setHistoryStatus("这条旧历史记录缺少完整快照，无法重新打开。请用新版重新分析一次后再保存。");
-      return;
-    }
+  function updateFeatureMatchStatus(candidateId: string, featureMatchIndex: number, status: FeatureMatchStatus) {
+    setInvestigation((current) => {
+      if (!current) {
+        return current;
+      }
 
-    setFiles([]);
-    setInvestigation(entry.investigation);
-    setComparisonInvestigation(null);
-    setError(null);
-    setExportStatus(null);
-    setHistoryStatus(`已重新打开：${entry.assetName}`);
-    setAnalysisStartedAt(entry.analysisStartedAt ?? null);
-    setAnalysisFinishedAt(entry.analysisFinishedAt ?? null);
-    setAnalysisProgress(100);
-    rememberLatestInvestigation(entry.investigation, entry.analysisStartedAt ?? null, entry.analysisFinishedAt ?? null);
-    setActiveMenu(null);
-  }
+      const nextInvestigation = refreshInvestigationReport({
+        ...current,
+        candidates: current.candidates.map((candidate) => {
+          if (candidate.id !== candidateId || !candidate.featureMatches?.[featureMatchIndex]) {
+            return candidate;
+          }
 
-  function compareHistoryItem(entry: HistoryItem) {
-    if (!investigation) {
-      setHistoryStatus("请先打开或完成一个当前调查，再选择历史记录进行对比。");
-      return;
-    }
-    if (!entry.investigation) {
-      setHistoryStatus("这条旧历史记录缺少完整快照，无法对比。请用新版重新分析一次后再保存。");
-      return;
-    }
-    if (entry.investigation.id === investigation.id) {
-      setHistoryStatus("当前调查与所选历史记录相同，无需对比。");
-      return;
-    }
+          return {
+            ...candidate,
+            featureMatches: candidate.featureMatches.map((match, index) => (index === featureMatchIndex ? { ...match, status } : match))
+          };
+        })
+      });
 
-    setComparisonInvestigation(entry.investigation);
-    setHistoryStatus(`正在对比：${entry.assetName}`);
-    setActiveMenu(null);
-  }
-
-  function deleteHistoryItem(id: string) {
-    setHistory((current) => {
-      const nextHistory = current.filter((entry) => entry.id !== id);
-      persistHistory(nextHistory);
-      return nextHistory;
+      rememberLatestInvestigation(nextInvestigation, analysisStartedAt, analysisFinishedAt);
+      return nextInvestigation;
     });
-    setComparisonInvestigation((current) => (current?.id === id ? null : current));
-    setHistoryStatus("已删除该条历史记录。");
   }
 
-  function clearHistory() {
-    setHistory([]);
-    setComparisonInvestigation(null);
-    persistHistory([]);
-    setHistoryStatus("历史记录已清空，当前打开的调查不会受影响。");
+  function addCandidateFeatureMatch(candidateId: string, featureMatch: FeatureMatch) {
+    setInvestigation((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const nextInvestigation = refreshInvestigationReport({
+        ...current,
+        candidates: current.candidates.map((candidate) => {
+          if (candidate.id !== candidateId) {
+            return candidate;
+          }
+
+          return {
+            ...candidate,
+            featureMatches: [...(candidate.featureMatches ?? []), featureMatch]
+          };
+        })
+      });
+
+      rememberLatestInvestigation(nextInvestigation, analysisStartedAt, analysisFinishedAt);
+      return nextInvestigation;
+    });
   }
 
-  function settingsForStorage() {
-    const { apiKey: _apiKey, baseUrl: _baseUrl, ...safeVisionConfig } = visionConfig;
+  function updateCandidateManualVerdict(candidateId: string, status: CandidateManualVerdictStatus, rationale: string) {
+    setInvestigation((current) => {
+      if (!current) {
+        return current;
+      }
+
+      const trimmedRationale = rationale.trim();
+      const nextInvestigation = refreshInvestigationReport({
+        ...current,
+        candidates: current.candidates.map((candidate) => {
+          if (candidate.id !== candidateId) {
+            return candidate;
+          }
+
+          return {
+            ...candidate,
+            manualVerdict: {
+              status,
+              ...(trimmedRationale ? { rationale: trimmedRationale } : {})
+            }
+          };
+        })
+      });
+
+      rememberLatestInvestigation(nextInvestigation, analysisStartedAt, analysisFinishedAt);
+      return nextInvestigation;
+    });
+  }
+
+  function updateVisionConfig(nextConfig: VisionModelConfig) {
+    const normalizedConfig = normalizeVisionConfig(nextConfig);
+    setVisionConfig(normalizedConfig);
+    setVisionProfiles((current) => syncActiveProfileConfig(current, activeVisionProfileId, normalizedConfig));
+  }
+
+  function selectVisionProfile(profileId: string) {
+    const syncedProfiles = syncActiveProfileConfig(visionProfiles, activeVisionProfileId, visionConfig);
+    const nextProfile = syncedProfiles.find((profile) => profile.id === profileId);
+    if (!nextProfile) {
+      return;
+    }
+
+    setVisionProfiles(syncedProfiles);
+    setActiveVisionProfileId(profileId);
+    setVisionConfig(nextProfile.config);
+    setAvailableModels([]);
+    setModelListStatus(null);
+    setSaveStatus(null);
+  }
+
+  function renameActiveVisionProfile(name: string) {
+    setVisionProfiles((current) => current.map((profile) => (profile.id === activeVisionProfileId ? { ...profile, name } : profile)));
+    setSaveStatus(null);
+  }
+
+  function addVisionProfile() {
+    const syncedProfiles = syncActiveProfileConfig(visionProfiles, activeVisionProfileId, visionConfig);
+    let nextIndex = syncedProfiles.length + 1;
+    while (syncedProfiles.some((profile) => profile.id === `profile-${nextIndex}`)) {
+      nextIndex += 1;
+    }
+    const nextProfile: VisionConfigProfile = {
+      id: `profile-${nextIndex}`,
+      name: `配置 ${nextIndex}`,
+      config: normalizeVisionConfig(visionConfig)
+    };
+
+    setVisionProfiles([...syncedProfiles, nextProfile]);
+    setActiveVisionProfileId(nextProfile.id);
+    setVisionConfig(nextProfile.config);
+    setAvailableModels([]);
+    setModelListStatus(null);
+    setSaveStatus(null);
+  }
+
+  function deleteActiveVisionProfile() {
+    if (visionProfiles.length <= 1) {
+      return;
+    }
+
+    const syncedProfiles = syncActiveProfileConfig(visionProfiles, activeVisionProfileId, visionConfig);
+    const remainingProfiles = syncedProfiles.filter((profile) => profile.id !== activeVisionProfileId);
+    const nextProfile = remainingProfiles[0];
+    setVisionProfiles(remainingProfiles);
+    setActiveVisionProfileId(nextProfile.id);
+    setVisionConfig(nextProfile.config);
+    setAvailableModels([]);
+    setModelListStatus(null);
+    setSaveStatus(null);
+  }
+
+  function settingsForStorage(nextProfiles = visionProfiles, nextActiveProfileId = activeVisionProfileId, nextConfig = visionConfig) {
+    const syncedProfiles = syncActiveProfileConfig(nextProfiles, nextActiveProfileId, nextConfig);
     return {
       outputLanguage,
-      visionConfig: safeVisionConfig
+      visionProfiles: syncedProfiles,
+      activeVisionProfileId: nextActiveProfileId
     } satisfies SavedSettings;
+  }
+
+  function persistInterfaceLanguage(language: OutputLanguage) {
+    try {
+      const currentSettings = loadSavedSettings();
+      localStorage.setItem(settingsStorageKey, JSON.stringify({ ...currentSettings, outputLanguage: language } satisfies SavedSettings));
+    } catch {
+      localStorage.setItem(settingsStorageKey, JSON.stringify({ outputLanguage: language } satisfies SavedSettings));
+    }
+  }
+
+  function changeInterfaceLanguage(language: OutputLanguage) {
+    setOutputLanguage(language);
+    persistInterfaceLanguage(language);
+    setSaveStatus(null);
   }
 
   async function analyze() {
     setError(null);
-    setExportStatus(null);
-    setHistoryStatus(null);
-    setComparisonInvestigation(null);
     setAnalysisStartedAt(null);
     setAnalysisFinishedAt(null);
     setAnalysisProgress(0);
     let startedAt: number | null = null;
     try {
       if (files.length === 0) {
-        throw new Error("请先上传图片或视频。");
+        throw new Error(copy.errors.noFile);
       }
       if (!visionConfig.apiKey?.trim()) {
-        throw new Error("请先填写视觉模型 API Key，系统需要视觉模型自动识别图片线索。");
+        throw new Error(copy.errors.noApiKey);
       }
       startedAt = Date.now();
       setClockNow(startedAt);
@@ -504,8 +792,7 @@ export default function App() {
             model: visionConfig.model?.trim() || "gpt-4o",
             matchingThreshold: visionConfig.matchingThreshold ?? 0.6,
             maxCandidates: visionConfig.maxCandidates ?? 10,
-            coordinateSystem: visionConfig.coordinateSystem ?? "WGS84 (EPSG:4326)",
-            terrainValidation: visionConfig.terrainValidation ?? true
+            coordinateSystem: visionConfig.coordinateSystem ?? "WGS84 (EPSG:4326)"
           })
         );
       }
@@ -516,12 +803,11 @@ export default function App() {
       const nextInvestigation = (await response.json()) as Investigation;
       const finishedAt = Date.now();
       setInvestigation(nextInvestigation);
-      rememberInvestigation(nextInvestigation, startedAt, finishedAt);
       setAnalysisProgress(100);
       setAnalysisFinishedAt(finishedAt);
       rememberLatestInvestigation(nextInvestigation, startedAt, finishedAt);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "分析失败");
+      setError(caught instanceof Error ? caught.message : copy.errors.analysisFailed);
       if (startedAt) {
         setAnalysisFinishedAt(Date.now());
       }
@@ -535,7 +821,7 @@ export default function App() {
     setModelListStatus(null);
     try {
       if (!visionConfig.apiKey?.trim()) {
-        throw new Error("请先填写 API Key。");
+        throw new Error(copy.fetchModels.missingApiKey);
       }
       const response = await fetch("/api/models", {
         method: "POST",
@@ -552,72 +838,23 @@ export default function App() {
       const models = Array.isArray(body.models) ? body.models.filter((model) => typeof model === "string" && model) : [];
       setAvailableModels(models);
       if (models.length > 0) {
-        setVisionConfig((current) => ({ ...current, model: models.includes(current.model ?? "") ? current.model : models[0] }));
-        setModelListStatus(`已获取 ${models.length} 个模型`);
+        updateVisionConfig({ ...visionConfig, model: models.includes(visionConfig.model ?? "") ? visionConfig.model : models[0] });
+        setModelListStatus(copy.fetchModels.success(models.length));
       } else {
-        setModelListStatus("接口未返回可用模型，可手动填写模型名。");
+        setModelListStatus(copy.fetchModels.empty);
       }
     } catch (caught) {
-      setModelListStatus(caught instanceof Error ? caught.message : "模型列表获取失败");
+      setModelListStatus(caught instanceof Error ? caught.message : copy.fetchModels.failed);
     } finally {
       setModelListLoading(false);
     }
   }
 
-  function showSampleInvestigation() {
-    setError(null);
-    setExportStatus(null);
-    setHistoryStatus(null);
-    setComparisonInvestigation(null);
-    const nextInvestigation = buildSampleInvestigation(outputLanguage);
-    setInvestigation(nextInvestigation);
-    const now = Date.now();
-    setAnalysisStartedAt(now);
-    setAnalysisFinishedAt(now);
-    setAnalysisProgress(100);
-    rememberInvestigation(nextInvestigation, now, now);
-    rememberLatestInvestigation(nextInvestigation, now, now);
-  }
-
   function saveSettings() {
-    localStorage.setItem(settingsStorageKey, JSON.stringify(settingsForStorage()));
-    setSaveStatus("配置已保存到本机浏览器；API Key 仅用于本次会话，不会持久保存。");
-  }
-
-  function handleDownloadMarkdown() {
-    if (!investigation) {
-      return;
-    }
-    exportReportAsMarkdown(investigation);
-    setExportStatus("已导出 Markdown 报告。");
-  }
-
-  function handleDownloadHtml() {
-    if (!investigation) {
-      return;
-    }
-    exportReportAsHtml(investigation);
-    setExportStatus("已导出 HTML 报告。");
-  }
-
-  function handlePrintReport() {
-    if (!investigation) {
-      return;
-    }
-    const opened = printReport(investigation);
-    setExportStatus(
-      opened
-        ? "已打开打印窗口，可在打印对话框中选择“另存为 PDF”。"
-        : "无法打开打印窗口，请检查浏览器是否拦截了弹窗。"
-    );
-  }
-
-  async function handleCopyReport() {
-    if (!investigation) {
-      return;
-    }
-    const ok = await copyReportToClipboard(investigation);
-    setExportStatus(ok ? "报告内容已复制到剪贴板。" : "复制失败，请手动选择文本复制。");
+    const syncedProfiles = syncActiveProfileConfig(visionProfiles, activeVisionProfileId, visionConfig);
+    setVisionProfiles(syncedProfiles);
+    localStorage.setItem(settingsStorageKey, JSON.stringify(settingsForStorage(syncedProfiles, activeVisionProfileId, visionConfig)));
+    setSaveStatus(copy.saveStatus);
   }
 
   return (
@@ -627,167 +864,97 @@ export default function App() {
           <span className="brand-mark" aria-hidden="true" />
           <div>
             <h1>GeoGuess</h1>
-            <p>OSINT 地理定位调查指挥中心</p>
+            <p>{copy.brandSubtitle}</p>
           </div>
         </div>
-        <div className="command-meta" aria-label="项目状态">
+        <div className="command-meta" aria-label={copy.commandMetaLabel}>
           <span>
-            项目：
+            {copy.projectLabel}
             <strong>{investigation?.id ? investigation.id.slice(0, 16) : "LOCAL-WORKBENCH"}</strong>
           </span>
           <span className={loading ? "command-live active" : investigation ? "command-live ready" : "command-live"}>
-            状态：
-            <strong>{loading ? "分析中" : investigation ? "已就绪" : "待命"}</strong>
+            {copy.statusLabel}
+            <strong>{loading ? copy.statusAnalyzing : investigation ? copy.statusReady : copy.statusStandby}</strong>
           </span>
         </div>
-        <nav className="header-nav" aria-label="工作台导航">
-          <div className="settings-menu">
-            <button className="header-nav-item project-nav" type="button" onClick={() => setActiveMenu(activeMenu === "project" ? null : "project")}>
-              项目
+        <nav className="header-nav" aria-label={copy.navLabel}>
+          <div className="language-toggle" role="group" aria-label={copy.interfaceLanguageLabel}>
+            <button
+              aria-pressed={outputLanguage === "zh-CN"}
+              className={outputLanguage === "zh-CN" ? "active" : ""}
+              type="button"
+              onClick={() => changeInterfaceLanguage("zh-CN")}
+            >
+              中
             </button>
-            {activeMenu === "project" ? (
-              <div className="nav-popover">
-                <strong>当前项目</strong>
-                <span>素材：{assetName ?? "未上传"}</span>
-                <span>候选：{candidateCount} 个</span>
-                <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-                  回到顶部
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <div className="settings-menu">
-            <button className="header-nav-item history-nav" type="button" onClick={() => setActiveMenu(activeMenu === "history" ? null : "history")}>
-              历史记录
+            <button
+              aria-pressed={outputLanguage === "en-US"}
+              className={outputLanguage === "en-US" ? "active" : ""}
+              type="button"
+              onClick={() => changeInterfaceLanguage("en-US")}
+            >
+              EN
             </button>
-            {activeMenu === "history" ? (
-              <div className="nav-popover history-popover" style={ { width: "360px", maxHeight: "70vh", overflowY: "auto" } }>
-                <strong>最近分析</strong>
-                {historyStatus ? <span>{historyStatus}</span> : null}
-                {history.length === 0 ? <span>暂无历史记录</span> : null}
-                {history.map((entry) => (
-                  <div key={entry.id} style={ { display: "grid", gap: "6px", borderTop: "1px solid var(--border)", paddingTop: "8px" } }>
-                    <span>
-                      {entry.assetName} · {entry.candidateCount} 个候选 · {formatHistoryDate(entry.createdAt)}
-                    </span>
-                    <div style={ { display: "flex", flexWrap: "wrap", gap: "6px" } }>
-                      <button type="button" onClick={() => restoreHistoryItem(entry)}>
-                        打开
-                      </button>
-                      <button type="button" onClick={() => compareHistoryItem(entry)}>
-                        对比当前
-                      </button>
-                      <button type="button" onClick={() => deleteHistoryItem(entry.id)}>
-                        删除
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {history.length > 0 ? (
-                  <button type="button" onClick={clearHistory}>
-                    清空全部历史
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
           </div>
           <div className="settings-menu">
             <button
               aria-expanded={settingsOpen}
               className="header-nav-item settings-nav"
               type="button"
-              onClick={() => {
-                setSettingsOpen((current) => !current);
-                setActiveMenu(null);
-              }}
+              onClick={() => setSettingsOpen((current) => !current)}
             >
-              设置
+              {outputLanguage === "zh-CN" ? "设置" : "Settings"}
             </button>
             {settingsOpen ? (
               <div className="settings-popover">
                 <ConfigPanel
+                  activeVisionProfileId={activeVisionProfileId}
                   availableModels={availableModels}
+                  copy={copy.configPanel}
                   modelListLoading={modelListLoading}
                   modelListStatus={modelListStatus}
-                  outputLanguage={outputLanguage}
                   saveStatus={saveStatus}
                   visionConfig={visionConfig}
+                  visionProfiles={visionProfiles}
+                  onAddVisionProfile={addVisionProfile}
+                  onDeleteVisionProfile={deleteActiveVisionProfile}
                   onFetchModels={fetchModels}
-                  onOutputLanguageChange={setOutputLanguage}
                   onSave={saveSettings}
-                  onVisionConfigChange={setVisionConfig}
+                  onVisionConfigChange={updateVisionConfig}
+                  onVisionProfileChange={selectVisionProfile}
+                  onVisionProfileNameChange={renameActiveVisionProfile}
                 />
-              </div>
-            ) : null}
-          </div>
-          <div className="settings-menu">
-            <button className="user-chip" type="button" onClick={() => setActiveMenu(activeMenu === "user" ? null : "user")}>
-              OC
-            </button>
-            {activeMenu === "user" ? (
-              <div className="nav-popover user-popover">
-                <strong>本地会话</strong>
-                <span>配置保存在浏览器本机</span>
-                <button type="button" onClick={saveSettings}>
-                  保存当前配置
-                </button>
               </div>
             ) : null}
           </div>
         </nav>
       </header>
       <div className="workspace">
-        <aside className="input-column" aria-label="分析控制栏">
+        <aside className="input-column" aria-label={copy.workflowSidebarLabel}>
           <ImageInput
+            copy={copy.imageInput}
             files={files}
             displayAssetName={files.length === 0 ? assetName : null}
             notes={scope.notes ?? ""}
             onFileChange={handleFileChange}
             onNotesChange={updateNotes}
           />
-          <ScopeForm value={scope} onChange={setScope} />
+          <ScopeForm copy={copy.scopeForm} value={scope} onChange={setScope} />
           <section className="analysis-action-panel">
-            <p className="sr-only">自动识别 OCR / 地物 / 设施 / 空间关系</p>
+            <p className="sr-only">{copy.workflowSrOnly}</p>
             <button className="primary-button" onClick={analyze} disabled={loading}>
-              {loading ? `分析中 ${analysisProgress}%` : "开始分析"}
+              {loading ? copy.analyzing(analysisProgress) : copy.analyze}
             </button>
             <button className="reset-button" type="button" onClick={() => setScope(defaultScope)}>
-              重置
+              {copy.reset}
             </button>
           </section>
         </aside>
         <div className="main-workbench">
-          {investigation && comparisonInvestigation ? (
-            <section className="panel" aria-label="历史调查对比" style={ { display: "grid", gap: "8px", marginBottom: "10px" } }>
-              <div className="card-title-row">
-                <h3>历史调查对比</h3>
-                <button className="small-button" type="button" onClick={() => setComparisonInvestigation(null)}>
-                  关闭
-                </button>
-              </div>
-              <div style={ { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "8px" } }>
-                <div className="scope-mode-note">
-                  <strong>当前调查</strong>
-                  <br />
-                  {getAssetName(investigation)} · {investigation.candidates.length} 个候选
-                  <br />
-                  第一候选：{bestCandidateName(investigation)} · 匹配 {bestCandidateScore(investigation)}
-                </div>
-                <div className="scope-mode-note">
-                  <strong>历史记录</strong>
-                  <br />
-                  {getAssetName(comparisonInvestigation)} · {comparisonInvestigation.candidates.length} 个候选
-                  <br />
-                  第一候选：{bestCandidateName(comparisonInvestigation)} · 匹配 {bestCandidateScore(comparisonInvestigation)}
-                </div>
-              </div>
-            </section>
-          ) : null}
           <CandidateResults
             assetMediaType={primaryAssetMediaType}
             assetName={assetName}
             assetPreviewUrl={primaryAssetPreviewUrl}
-            exportStatus={exportStatus}
             investigation={investigation}
             loading={loading}
             error={error}
@@ -796,32 +963,17 @@ export default function App() {
             analysisProgress={analysisProgress}
             analysisStartedAt={analysisStartedAt}
             analysisFinishedAt={analysisFinishedAt}
+            showLowConfidenceCandidates={visionConfig.showLowConfidenceCandidates ?? true}
+            maxLowConfidenceCandidates={visionConfig.maxLowConfidenceCandidates ?? 10}
             matchingThreshold={visionConfig.matchingThreshold ?? 0.6}
             modelName={selectedModelName}
             now={clockNow}
-            onCopyReport={handleCopyReport}
-            onDownloadHtml={handleDownloadHtml}
-            onDownloadMarkdown={handleDownloadMarkdown}
-            onPrintReport={handlePrintReport}
-            onShowSample={showSampleInvestigation}
+            onFeatureMatchStatusChange={updateFeatureMatchStatus}
+            onFeatureMatchAdd={addCandidateFeatureMatch}
+            onCandidateVerdictChange={updateCandidateManualVerdict}
           />
         </div>
       </div>
-      <footer className="command-footer" aria-label="系统活动">
-        <div>
-          <span>系统状态</span>
-          <strong>{error ? "需要处理错误" : "全部服务正常"}</strong>
-        </div>
-        <div>
-          <span>使用量</span>
-          <strong>{history.length} / {historyLimit} 条本地记录</strong>
-        </div>
-        <div>
-          <span>活动日志</span>
-          <strong>{loading ? "分析任务运行中" : investigation ? "候选生成完成" : "等待上传素材"}</strong>
-        </div>
-        <a href="#root">查看完整日志</a>
-      </footer>
     </main>
   );
 }
